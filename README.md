@@ -1,4 +1,4 @@
-# CSMS - Charging Station Management System
+# CIMORINGS - Charging Integration Monitoring System
 
 Sistem manajemen stasiun pengisian dengan protokol OCPP 1.6 lengkap, dibangun dengan Vue.js dan Node.js.
 
