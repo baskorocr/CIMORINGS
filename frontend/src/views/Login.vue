@@ -87,16 +87,22 @@ export default {
     async handleLogin() {
       try {
         await this.$refs.loginForm.validate()
+        console.log('Attempting login with:', this.loginData.username)
         const result = await this.login(this.loginData)
         
+        console.log('Login result:', result)
+        
         if (result.success) {
+          console.log('Login successful, user:', this.$store.state.user)
           ElMessage.success('Login successful')
           this.$router.push('/')
         } else {
+          console.log('Login failed:', result.message)
           ElMessage.error(result.message)
         }
       } catch (error) {
         console.error('Login error:', error)
+        ElMessage.error('Login failed')
       }
     }
   }

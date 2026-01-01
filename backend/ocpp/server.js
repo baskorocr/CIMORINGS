@@ -368,12 +368,37 @@ class OCPPServer {
 
   async updateConnectorStatus(chargePointId, connectorId, status) {
     const connection = getConnection();
-    await connection.execute(`
-      UPDATE connectors c
+    
+    // First, ensure the connector exists
+    const [existing] = await connection.execute(`
+      SELECT c.id FROM connectors c
       JOIN charging_stations cs ON c.charging_station_id = cs.id
-      SET c.status = ?
       WHERE cs.charge_point_id = ? AND c.connector_id = ?
-    `, [status, chargePointId, connectorId]);
+    `, [chargePointId, connectorId]);
+    
+    if (existing.length === 0) {
+      // Auto-create connector if it doesn't exist
+      const [station] = await connection.execute(
+        'SELECT id FROM charging_stations WHERE charge_point_id = ?',
+        [chargePointId]
+      );
+      
+      if (station.length > 0) {
+        await connection.execute(
+          'INSERT INTO connectors (charging_station_id, connector_id, status) VALUES (?, ?, ?)',
+          [station[0].id, connectorId, status]
+        );
+        console.log(`Auto-created connector ${connectorId} for station ${chargePointId}`);
+      }
+    } else {
+      // Update existing connector
+      await connection.execute(`
+        UPDATE connectors c
+        JOIN charging_stations cs ON c.charging_station_id = cs.id
+        SET c.status = ?
+        WHERE cs.charge_point_id = ? AND c.connector_id = ?
+      `, [status, chargePointId, connectorId]);
+    }
   }
 
   async createTransaction(chargePointId, payload) {
@@ -451,21 +476,13 @@ class OCPPServer {
     );
 
     if (existing.length === 0) {
-      // Auto-create charging station
+      // Auto-create charging station (without connectors)
       const [result] = await connection.execute(
-        'INSERT INTO charging_stations (charge_point_id, name, location) VALUES (?, ?, ?)',
-        [chargePointId, `Station ${chargePointId}`, 'Auto-created']
+        'INSERT INTO charging_stations (charge_point_id, name, location, status) VALUES (?, ?, ?, ?)',
+        [chargePointId, `Station ${chargePointId}`, 'Auto-created', 'Available']
       );
       
-      const stationId = result.insertId;
-      
-      // Create default connector
-      await connection.execute(
-        'INSERT INTO connectors (charging_station_id, connector_id) VALUES (?, ?)',
-        [stationId, 1]
-      );
-      
-      console.log(`Auto-created station: ${chargePointId}`);
+      console.log(`Auto-created station: ${chargePointId} (connectors will be created dynamically)`);
     }
   }
 

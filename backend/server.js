@@ -10,6 +10,8 @@ const OCPPServer = require('./ocpp/server');
 const authRoutes = require('./routes/auth');
 const stationRoutes = require('./routes/stations');
 const monitoringRoutes = require('./routes/monitoring');
+const userRoutes = require('./routes/users');
+const roleRoutes = require('./routes/roles');
 
 const app = express();
 const server = http.createServer(app);
@@ -31,6 +33,8 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api', stationRoutes);
 app.use('/api', monitoringRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/roles', roleRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

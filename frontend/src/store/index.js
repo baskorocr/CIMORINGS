@@ -1,5 +1,6 @@
 import { createStore } from 'vuex'
 import { authAPI, stationAPI } from '@/services/api'
+import { PermissionChecker } from '@/utils/permissions'
 
 export default createStore({
   state: {
@@ -8,6 +9,13 @@ export default createStore({
     stations: [],
     transactions: [],
     transactionsPagination: {
+      page: 1,
+      limit: 10,
+      total: 0,
+      totalPages: 0
+    },
+    users: [],
+    usersPagination: {
       page: 1,
       limit: 10,
       total: 0,
@@ -45,6 +53,11 @@ export default createStore({
     
     SET_LOADING(state, loading) {
       state.loading = loading
+    },
+    
+    SET_USERS(state, { data, pagination }) {
+      state.users = data
+      state.usersPagination = pagination
     }
   },
   
@@ -95,11 +108,55 @@ export default createStore({
       } finally {
         commit('SET_LOADING', false)
       }
+    },
+    
+    async fetchUsers({ commit }, { page = 1, limit = 10 } = {}) {
+      try {
+        commit('SET_LOADING', true)
+        const response = await authAPI.getUsers(page, limit)
+        commit('SET_USERS', response.data)
+      } catch (error) {
+        console.error('Failed to fetch users:', error)
+      } finally {
+        commit('SET_LOADING', false)
+      }
     }
   },
   
   getters: {
     isAuthenticated: (state) => !!state.token,
-    isAdmin: (state) => state.user?.role === 'admin'
+    isAdmin: (state) => {
+      if (!state.user || !state.user.roles) return false
+      return state.user.roles.some(role => 
+        (typeof role === 'string' && (role === 'admin' || role === 'super-admin')) ||
+        (typeof role === 'object' && (role.name === 'admin' || role.name === 'super-admin'))
+      )
+    },
+    
+    permissionChecker: (state) => {
+      return state.user ? new PermissionChecker(state.user) : null
+    },
+    
+    can: (state, getters) => (permission) => {
+      const checker = getters.permissionChecker
+      if (!checker) return false
+      
+      // Check effective permissions from roles + direct permissions
+      const user = state.user
+      if (!user) return false
+      
+      // Use effectivePermissions if available (from login response)
+      if (user.effectivePermissions && user.effectivePermissions.includes(permission)) {
+        return true
+      }
+      
+      // Fallback to permission checker
+      return checker.can(permission)
+    },
+    
+    hasRole: (state, getters) => (role) => {
+      const checker = getters.permissionChecker
+      return checker ? checker.hasRole(role) : false
+    }
   }
 })

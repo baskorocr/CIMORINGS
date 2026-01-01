@@ -2,6 +2,7 @@ const express = require('express');
 const {
   getDashboardStats,
   getActiveTransactions,
+  getCompletedTransactions,
   getTransactionDetail,
   getStationConnectors,
   getOCPPMessages
@@ -24,6 +25,7 @@ router.use(authenticateToken);
 // Monitoring endpoints
 router.get('/dashboard/stats', getDashboardStats);
 router.get('/transactions/active', getActiveTransactions);
+router.get('/transactions/completed', getCompletedTransactions);
 router.get('/transactions/:id/detail', getTransactionDetail);
 router.get('/connected-stations', getConnectedStations);
 router.get('/stations/:chargePointId/connectors', getStationConnectors);

@@ -43,73 +43,116 @@
         </el-col>
       </el-row>
 
-      <el-card class="transactions-card">
-        <template #header>
-          <span>Active Transactions</span>
-        </template>
+      <el-tabs v-model="activeTab" class="monitoring-tabs">
+        <el-tab-pane label="Active Transactions" name="active">
+          <el-table :data="activeTransactions" style="width: 100%">
+            <el-table-column prop="transaction_id" label="Transaction ID" width="120" />
+            <el-table-column prop="station_name" label="Station" />
+            <el-table-column prop="connector_id" label="Connector" width="100" />
+            <el-table-column prop="id_tag" label="ID Tag" />
+            <el-table-column label="Duration" width="120">
+              <template #default="scope">
+                {{ formatDuration(scope.row.duration_seconds) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="Energy" width="120">
+              <template #default="scope">
+                <span v-if="scope.row.energy_consumed > 0">
+                  {{ scope.row.energy_consumed }} kWh
+                </span>
+                <span v-else>
+                  {{ calculateEnergy(scope.row) }} kWh
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="Power" width="120">
+              <template #default="scope">
+                <span v-if="scope.row.max_power > 0">
+                  {{ scope.row.max_power }} kW
+                </span>
+                <span v-else-if="meterData[scope.row.transaction_id]">
+                  {{ meterData[scope.row.transaction_id].power }} kW
+                </span>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="Battery" width="120">
+              <template #default="scope">
+                <span v-if="meterData[scope.row.transaction_id]?.soc">
+                  {{ meterData[scope.row.transaction_id].soc }}%
+                </span>
+                <span v-else-if="scope.row.soc">
+                  {{ scope.row.soc }}%
+                </span>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="Actions" width="200">
+              <template #default="scope">
+                <el-button 
+                  size="small" 
+                  type="primary"
+                  @click="viewDetail(scope.row)"
+                >
+                  Detail
+                </el-button>
+                <el-button 
+                  size="small" 
+                  type="danger"
+                  @click="stopTransaction(scope.row)"
+                >
+                  Stop
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-tab-pane>
         
-        <el-table :data="activeTransactions" style="width: 100%">
-          <el-table-column prop="transaction_id" label="Transaction ID" width="120" />
-          <el-table-column prop="station_name" label="Station" />
-          <el-table-column prop="connector_id" label="Connector" width="100" />
-          <el-table-column prop="id_tag" label="ID Tag" />
-          <el-table-column label="Duration" width="120">
-            <template #default="scope">
-              {{ formatDuration(scope.row.duration_seconds) }}
-            </template>
-          </el-table-column>
-          <el-table-column label="Energy" width="120">
-            <template #default="scope">
-              <span v-if="scope.row.energy_consumed > 0">
-                {{ scope.row.energy_consumed }} kWh
-              </span>
-              <span v-else>
-                {{ calculateEnergy(scope.row) }} kWh
-              </span>
-            </template>
-          </el-table-column>
-          <el-table-column label="Power" width="120">
-            <template #default="scope">
-              <span v-if="scope.row.max_power > 0">
-                {{ scope.row.max_power }} kW
-              </span>
-              <span v-else-if="meterData[scope.row.transaction_id]">
-                {{ meterData[scope.row.transaction_id].power }} kW
-              </span>
-              <span v-else>-</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="Battery" width="120">
-            <template #default="scope">
-              <span v-if="meterData[scope.row.transaction_id]?.soc">
-                {{ meterData[scope.row.transaction_id].soc }}%
-              </span>
-              <span v-else-if="scope.row.soc">
-                {{ scope.row.soc }}%
-              </span>
-              <span v-else>-</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="Actions" width="200">
-            <template #default="scope">
-              <el-button 
-                size="small" 
-                type="primary"
-                @click="viewDetail(scope.row)"
-              >
-                Detail
-              </el-button>
-              <el-button 
-                size="small" 
-                type="danger"
-                @click="stopTransaction(scope.row)"
-              >
-                Stop
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
+        <el-tab-pane label="Transaction History" name="history">
+          <el-table :data="completedTransactions" style="width: 100%">
+            <el-table-column prop="transaction_id" label="Transaction ID" width="120" />
+            <el-table-column prop="station_name" label="Station" />
+            <el-table-column prop="connector_id" label="Connector" width="100" />
+            <el-table-column prop="id_tag" label="ID Tag" />
+            <el-table-column prop="start_timestamp" label="Started" width="150">
+              <template #default="scope">
+                {{ formatDateTime(scope.row.start_timestamp) }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="stop_timestamp" label="Stopped" width="150">
+              <template #default="scope">
+                {{ formatDateTime(scope.row.stop_timestamp) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="Duration" width="120">
+              <template #default="scope">
+                {{ formatDuration(scope.row.duration_seconds) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="Energy" width="120">
+              <template #default="scope">
+                {{ ((scope.row.meter_stop - scope.row.meter_start) / 1000).toFixed(2) }} kWh
+              </template>
+            </el-table-column>
+            <el-table-column prop="status" label="Status" width="100">
+              <template #default="scope">
+                <el-tag :type="scope.row.status === 'completed' ? 'success' : 'info'">
+                  {{ scope.row.status }}
+                </el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+          
+          <el-pagination
+            v-model:current-page="historyPage"
+            :page-size="historyLimit"
+            :total="historyTotal"
+            @current-change="loadCompletedTransactions"
+            layout="prev, pager, next, total"
+            class="mt-4"
+          />
+        </el-tab-pane>
+      </el-tabs>
 
       <!-- Transaction Detail Dialog -->
       <el-dialog
@@ -201,7 +244,12 @@ export default {
   data() {
     return {
       isConnected: false,
+      activeTab: 'active',
       activeTransactions: [],
+      completedTransactions: [],
+      historyPage: 1,
+      historyLimit: 10,
+      historyTotal: 0,
       meterData: {},
       showDetailDialog: false,
       selectedTransaction: null,
@@ -239,6 +287,7 @@ export default {
   async mounted() {
     console.log('Monitoring component mounted');
     await this.loadData();
+    await this.loadCompletedTransactions();
     this.setupRealtime();
     this.startAutoRefresh();
   },
@@ -337,6 +386,20 @@ export default {
       const minutes = Math.floor((seconds % 3600) / 60)
       const secs = seconds % 60
       return `${hours}h ${minutes}m ${secs}s`
+    },
+
+    async loadCompletedTransactions() {
+      try {
+        const response = await monitoringAPI.getCompletedTransactions(this.historyPage, this.historyLimit)
+        this.completedTransactions = response.data.data
+        this.historyTotal = response.data.pagination.total
+      } catch (error) {
+        console.error('Failed to load completed transactions:', error)
+      }
+    },
+
+    formatDateTime(dateString) {
+      return new Date(dateString).toLocaleString()
     },
 
     calculateEnergy(transaction) {

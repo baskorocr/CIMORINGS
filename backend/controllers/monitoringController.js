@@ -148,9 +148,47 @@ const getOCPPMessages = async (req, res) => {
   }
 };
 
+const getCompletedTransactions = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const offset = (page - 1) * limit;
+    const connection = getConnection();
+    
+    const [transactions] = await connection.execute(`
+      SELECT 
+        t.*,
+        cs.name as station_name,
+        cs.charge_point_id,
+        TIMESTAMPDIFF(SECOND, t.start_timestamp, t.stop_timestamp) as duration_seconds
+      FROM transactions t
+      JOIN charging_stations cs ON t.charging_station_id = cs.id
+      WHERE t.status IN ('completed', 'stopped')
+      ORDER BY t.stop_timestamp DESC
+      LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}
+    `);
+    
+    const [countResult] = await connection.execute(
+      'SELECT COUNT(*) as total FROM transactions WHERE status IN ("completed", "stopped")'
+    );
+    
+    res.json({
+      data: transactions,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: countResult[0].total,
+        totalPages: Math.ceil(countResult[0].total / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getActiveTransactions,
+  getCompletedTransactions,
   getTransactionDetail,
   getStationConnectors,
   getOCPPMessages

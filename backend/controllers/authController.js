@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { getConnection } = require('../config/database');
+const { getUserWithRolesAndPermissions } = require('./userController');
 
 const login = async (req, res) => {
   try {
@@ -23,8 +24,16 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    // Get user with roles and permissions
+    const userWithPermissions = await getUserWithRolesAndPermissions(user.id);
+
     const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role },
+      { 
+        id: user.id, 
+        username: user.username, 
+        roles: userWithPermissions.roles,
+        permissions: userWithPermissions.effective_permissions
+      },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -35,10 +44,13 @@ const login = async (req, res) => {
         id: user.id,
         username: user.username,
         email: user.email,
-        role: user.role
+        roles: userWithPermissions.roles,
+        permissions: userWithPermissions.direct_permissions,
+        effectivePermissions: userWithPermissions.effective_permissions
       }
     });
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };

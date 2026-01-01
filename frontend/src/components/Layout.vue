@@ -17,19 +17,24 @@
           <span>Dashboard</span>
         </el-menu-item>
         
-        <el-menu-item index="/stations">
+        <el-menu-item index="/stations" v-can="'stations.view'">
           <el-icon><Position /></el-icon>
-          <span>Charging Stations</span>
+          <span>Stations</span>
         </el-menu-item>
         
-        <el-menu-item index="/monitoring">
+        <el-menu-item index="/monitoring" v-can="'monitoring.view'">
           <el-icon><Monitor /></el-icon>
-          <span>Real-time Monitoring</span>
+          <span>Monitoring</span>
         </el-menu-item>
         
-        <el-menu-item index="/transactions">
+        <el-menu-item index="/transactions" v-can="'transactions.view'">
           <el-icon><List /></el-icon>
           <span>Transactions</span>
+        </el-menu-item>
+        
+        <el-menu-item index="/users" v-can="'users.view'">
+          <el-icon><User /></el-icon>
+          <span>Users</span>
         </el-menu-item>
       </el-menu>
     </el-aside>
@@ -75,8 +80,10 @@ export default {
     pageTitle() {
       const routeNames = {
         '/': 'Dashboard',
-        '/stations': 'Charging Stations',
-        '/transactions': 'Transactions'
+        '/stations': 'Stations',
+        '/transactions': 'Transactions',
+        '/monitoring': 'Monitoring',
+        '/users': 'Users'
       }
       return routeNames[this.$route.path] || 'CSMS'
     }

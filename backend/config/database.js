@@ -2,10 +2,10 @@ const mysql = require('mysql2/promise');
 require('dotenv').config();
 
 const dbConfig = {
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'csms_db'
 };
 
 let connection;
@@ -14,23 +14,24 @@ const connectDB = async () => {
   try {
     // First connect without database to create it
     const tempConnection = await mysql.createConnection({
-      host: process.env.DB_HOST,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD
+      host: dbConfig.host,
+      user: dbConfig.user,
+      password: dbConfig.password
     });
     
-    await tempConnection.execute(`CREATE DATABASE IF NOT EXISTS ${process.env.DB_NAME}`);
+    await tempConnection.execute(`CREATE DATABASE IF NOT EXISTS ${dbConfig.database}`);
     await tempConnection.end();
     
     // Now connect with database
     connection = await mysql.createConnection(dbConfig);
-    console.log('MySQL Connected');
+    console.log('MySQL Connected to', dbConfig.database);
     
     // Create tables
     await createTables();
+    return connection;
   } catch (error) {
     console.error('Database connection error:', error);
-    process.exit(1);
+    throw error;
   }
 };
 
