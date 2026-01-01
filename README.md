@@ -207,19 +207,6 @@ ws://localhost:8080/YOUR_STATION_ID
 }]
 ```
 
-## Migration Scripts
-
-### Database Migration
-```bash
-# Migrate ke dynamic role system
-node backend/migrate-to-dynamic-roles.js
-
-# Fix stuck transactions
-node backend/fix-stuck-transactions.js
-
-# Assign permissions ke roles
-node backend/assign-admin-permissions.js
-```
 
 ## Troubleshooting
 
