@@ -1,10 +1,11 @@
 # CIMORINGS - Charging Integration Monitoring System
 
-Sistem manajemen stasiun pengisian dengan protokol OCPP 1.6 lengkap, dibangun dengan Vue.js dan Node.js.
+Sistem manajemen stasiun pengisian dengan protokol OCPP 1.6 lengkap, dibangun dengan Vue.js dan Node.js. **Sekarang dengan desain responsive dan mobile-friendly!**
 
-## Fitur
+## 🌟 Fitur Utama
 
 - **Protokol OCPP 1.6 Lengkap**: Mendukung semua message types sesuai standar OCPP
+- **📱 Fully Responsive**: Desain mobile-first yang responsive untuk semua device
 - **Dashboard Real-time**: Monitoring status stasiun dan transaksi
 - **Manajemen Stasiun**: CRUD operations untuk charging stations
 - **Tracking Transaksi**: Monitor semua transaksi pengisian dengan history
@@ -12,7 +13,16 @@ Sistem manajemen stasiun pengisian dengan protokol OCPP 1.6 lengkap, dibangun de
 - **Dynamic Role Management**: Sistem role dan permission yang dinamis dari database
 - **Permission Management**: Tambah/hapus permission untuk fitur baru
 - **Real-time Monitoring**: WebSocket untuk update real-time status dan transaksi
-- **UI Modern**: Interface yang menarik dengan Element Plus
+- **🎨 UI Modern**: Interface yang menarik dengan Element Plus dan responsive design
+
+## 📱 Mobile-Responsive Features
+
+- **Mobile Navigation**: Hamburger menu dengan sidebar collapsible
+- **Touch-Friendly Interface**: Semua elemen dioptimalkan untuk touch interaction
+- **Responsive Cards**: Tampilan kartu khusus untuk mobile device
+- **Adaptive Tables**: Tabel yang responsive dengan horizontal scroll
+- **Mobile-First Design**: Desain dimulai dari mobile kemudian desktop
+- **Cross-Device Compatibility**: Bekerja sempurna di phone, tablet, dan desktop
 
 ## Teknologi
 

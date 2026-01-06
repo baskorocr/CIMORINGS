@@ -2,10 +2,11 @@ import axios from 'axios'
 import router from '@/router'
 import store from '@/store'
 
-const API_BASE_URL = 'http://localhost:3000/api'
+const API_BASE_URL = 'http://8.215.38.147:3000/api'
 
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: '/api',
+  withCredentials: true,
   timeout: 10000
 })
 
@@ -40,6 +41,7 @@ api.interceptors.response.use(
 export const authAPI = {
   login: (credentials) => api.post('/auth/login', credentials),
   register: (userData) => api.post('/auth/register', userData),
+  updateProfile: (profileData) => api.put('/auth/profile', profileData),
   getUsers: (page = 1, limit = 10) => api.get(`/users?page=${page}&limit=${limit}`),
   createUser: (userData) => api.post('/users', userData),
   updateUser: (id, userData) => api.put(`/users/${id}`, userData),
@@ -64,6 +66,8 @@ export const stationAPI = {
   getStations: () => api.get('/stations'),
   getStation: (id) => api.get(`/stations/${id}`),
   createStation: (data) => api.post('/stations', data),
+  updateStation: (id, data) => api.put(`/stations/${id}`, data),
+  deleteStation: (id) => api.delete(`/stations/${id}`),
   getTransactions: (page = 1, limit = 10) => api.get(`/transactions?page=${page}&limit=${limit}`)
 }
 

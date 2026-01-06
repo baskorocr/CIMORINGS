@@ -40,7 +40,7 @@
               size="small" 
               type="danger" 
               @click="deleteRole(row)"
-              :disabled="row.user_count > 0"
+              :disabled="row.user_count > 0 || isProtectedRole(row.name)"
             >
               Delete
             </el-button>
@@ -131,6 +131,11 @@ export default {
   },
   
   methods: {
+    isProtectedRole(roleName) {
+      const protectedRoles = ['admin', 'super_admin'];
+      return protectedRoles.includes(roleName);
+    },
+    
     async fetchRoles() {
       try {
         this.loading = true

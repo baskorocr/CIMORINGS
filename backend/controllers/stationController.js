@@ -113,9 +113,126 @@ const getTransactions = async (req, res) => {
   }
 };
 
+const updateChargingStation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, location, connector_count } = req.body;
+    const connection = getConnection();
+    
+    // Check if station exists
+    const [stations] = await connection.execute(
+      'SELECT * FROM charging_stations WHERE id = ?',
+      [id]
+    );
+    
+    if (stations.length === 0) {
+      return res.status(404).json({ message: 'Charging station not found' });
+    }
+    
+    // Update station
+    await connection.execute(
+      'UPDATE charging_stations SET name = ?, location = ? WHERE id = ?',
+      [name, location, id]
+    );
+    
+    // Update connectors if count changed
+    if (connector_count) {
+      const [currentConnectors] = await connection.execute(
+        'SELECT COUNT(*) as count FROM connectors WHERE charging_station_id = ?',
+        [id]
+      );
+      
+      const currentCount = currentConnectors[0].count;
+      
+      if (connector_count > currentCount) {
+        // Add new connectors
+        for (let i = currentCount + 1; i <= connector_count; i++) {
+          await connection.execute(
+            'INSERT INTO connectors (charging_station_id, connector_id) VALUES (?, ?)',
+            [id, i]
+          );
+        }
+      } else if (connector_count < currentCount) {
+        // Remove excess connectors (only if not in use)
+        await connection.execute(
+          'DELETE FROM connectors WHERE charging_station_id = ? AND connector_id > ? AND status = "Available"',
+          [id, connector_count]
+        );
+      }
+    }
+    
+    res.json({ message: 'Charging station updated successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+const deleteChargingStation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const connection = getConnection();
+    
+    // Check if station exists
+    const [stations] = await connection.execute(
+      'SELECT * FROM charging_stations WHERE id = ?',
+      [id]
+    );
+    
+    if (stations.length === 0) {
+      return res.status(404).json({ message: 'Charging station not found' });
+    }
+    
+    // Check if station has active transactions
+    const [activeTransactions] = await connection.execute(
+      'SELECT COUNT(*) as count FROM transactions WHERE charging_station_id = ? AND status = "active"',
+      [id]
+    );
+    
+    if (activeTransactions[0].count > 0) {
+      return res.status(400).json({ message: 'Cannot delete station with active transactions' });
+    }
+    
+    // Delete connectors first (foreign key constraint)
+    await connection.execute(
+      'DELETE FROM connectors WHERE charging_station_id = ?',
+      [id]
+    );
+    
+    // Delete station
+    await connection.execute(
+      'DELETE FROM charging_stations WHERE id = ?',
+      [id]
+    );
+    
+    res.json({ message: 'Charging station deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Get connectors for a station
+const getStationConnectors = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const connection = getConnection();
+    
+    const [connectors] = await connection.execute(
+      'SELECT * FROM connectors WHERE charging_station_id = ? ORDER BY connector_id',
+      [id]
+    );
+    
+    res.json(connectors);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 module.exports = {
   getChargingStations,
   getChargingStation,
   createChargingStation,
-  getTransactions
+  updateChargingStation,
+  deleteChargingStation,
+  getTransactions,
+  getStationConnectors
 };

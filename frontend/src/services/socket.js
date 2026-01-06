@@ -4,49 +4,66 @@ class SocketService {
   constructor() {
     this.socket = null
     this.listeners = new Map()
+    this.isConnecting = false
   }
 
   connect() {
-    if (!this.socket) {
-      console.log('🔌 Attempting to connect to Socket.IO server...');
-      this.socket = io('http://192.168.0.109:3000', {
-        autoConnect: true,
-        reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionAttempts: 5,
-        transports: ['websocket', 'polling']
-      })
-
-      this.socket.on('connect', () => {
-        console.log('✅ Connected to real-time server')
-      })
-
-      this.socket.on('disconnect', () => {
-        console.log('❌ Disconnected from real-time server')
-      })
-
-      this.socket.on('connect_error', (error) => {
-        console.error('Connection error:', error)
-      })
+    if (this.socket?.connected) {
+      return this.socket
     }
+
+    if (this.isConnecting) {
+      return this.socket
+    }
+
+    this.isConnecting = true
+    console.log('🔌 Connecting to Socket.IO server...')
+    
+    this.socket = io('https://cgs-csms.dharmap.com', {
+      path: '/socket.io',
+      autoConnect: true,
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
+      transports: ['websocket'],
+      withCredentials: true,
+      forceNew: false
+    })
+
+    this.socket.on('connect', () => {
+      console.log('✅ Connected to real-time server')
+      this.isConnecting = false
+    })
+
+    this.socket.on('disconnect', () => {
+      console.log('❌ Disconnected from real-time server')
+      this.isConnecting = false
+    })
+
+    this.socket.on('connect_error', (error) => {
+      console.error('Connection error:', error)
+      this.isConnecting = false
+    })
+
     return this.socket
   }
 
   disconnect() {
     if (this.socket) {
+      this.removeAllListeners()
       this.socket.disconnect()
       this.socket = null
+      this.isConnecting = false
     }
   }
 
   on(event, callback) {
-    if (!this.socket) {
+    if (!this.socket || !this.socket.connected) {
       this.connect()
     }
     
     this.socket.on(event, callback)
     
-    // Store listener for cleanup
     if (!this.listeners.has(event)) {
       this.listeners.set(event, [])
     }
@@ -58,7 +75,6 @@ class SocketService {
       this.socket.off(event, callback)
     }
     
-    // Remove from stored listeners
     if (this.listeners.has(event)) {
       const callbacks = this.listeners.get(event)
       const index = callbacks.indexOf(callback)
@@ -69,12 +85,11 @@ class SocketService {
   }
 
   emit(event, data) {
-    if (this.socket) {
+    if (this.socket?.connected) {
       this.socket.emit(event, data)
     }
   }
 
-  // Cleanup all listeners
   removeAllListeners() {
     if (this.socket) {
       this.listeners.forEach((callbacks, event) => {
@@ -84,6 +99,19 @@ class SocketService {
       })
       this.listeners.clear()
     }
+  }
+
+  isConnected() {
+    return this.socket?.connected || false
+  }
+
+  forceReconnect() {
+    if (this.socket) {
+      this.socket.disconnect()
+      this.socket = null
+    }
+    this.isConnecting = false
+    return this.connect()
   }
 }
 

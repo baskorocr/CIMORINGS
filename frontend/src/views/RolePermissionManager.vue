@@ -192,12 +192,18 @@ export default {
       }
     },
     
-    removeRole(role) {
-      if (this.user.roles) {
-        const index = this.user.roles.indexOf(role)
-        if (index > -1) {
-          this.user.roles.splice(index, 1)
+    async removeRole(role) {
+      try {
+        if (this.user.roles) {
+          const index = this.user.roles.indexOf(role)
+          if (index > -1) {
+            this.user.roles.splice(index, 1)
+            // Save changes to server
+            await this.saveChanges()
+          }
         }
+      } catch (error) {
+        this.$message.error('Failed to remove role')
       }
     },
     
@@ -211,12 +217,18 @@ export default {
       }
     },
     
-    removePermission(permission) {
-      if (this.user.permissions) {
-        const index = this.user.permissions.indexOf(permission)
-        if (index > -1) {
-          this.user.permissions.splice(index, 1)
+    async removePermission(permission) {
+      try {
+        if (this.user.permissions) {
+          const index = this.user.permissions.indexOf(permission)
+          if (index > -1) {
+            this.user.permissions.splice(index, 1)
+            // Save changes to server
+            await this.saveChanges()
+          }
         }
+      } catch (error) {
+        this.$message.error('Failed to remove permission')
       }
     },
     

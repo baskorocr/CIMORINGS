@@ -80,7 +80,7 @@ const updateRole = async (req, res) => {
       const [permResult] = await connection.execute('SELECT id FROM permissions WHERE name = ?', [permissionName]);
       if (permResult.length > 0) {
         await connection.execute(
-          'INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)',
+          'INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)',
           [id, permResult[0].id]
         );
       }
@@ -96,6 +96,18 @@ const deleteRole = async (req, res) => {
   try {
     const { id } = req.params;
     const connection = getConnection();
+    
+    // Get role info
+    const [roleInfo] = await connection.execute('SELECT name FROM roles WHERE id = ?', [id]);
+    if (roleInfo.length === 0) {
+      return res.status(404).json({ message: 'Role not found' });
+    }
+    
+    // Check if role is protected
+    const protectedRoles = ['admin', 'super_admin'];
+    if (protectedRoles.includes(roleInfo[0].name)) {
+      return res.status(400).json({ message: 'Cannot delete protected system role' });
+    }
     
     // Check if role is in use
     const [users] = await connection.execute('SELECT COUNT(*) as count FROM user_roles WHERE role_id = ?', [id]);

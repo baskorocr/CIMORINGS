@@ -5,6 +5,7 @@ import store from './store'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import './assets/fix.css'
+import './assets/responsive.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import permissionDirective from '@/utils/permission-directive'
 

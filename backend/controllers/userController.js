@@ -119,16 +119,28 @@ const createUser = async (req, res) => {
 const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { username, email, roles } = req.body;
+    const { username, email, password, roles } = req.body;
     const connection = getConnection();
     
-    console.log('Update user request:', { id, username, email, roles });
+    console.log('Update user request:', { id, username, email, hasPassword: !!password, roles });
     
-    // Update user basic info
-    await connection.execute(
-      'UPDATE users SET username = ?, email = ? WHERE id = ?',
-      [username, email, id]
-    );
+    // Prepare update query based on whether password is provided
+    let updateQuery = 'UPDATE users SET username = ?, email = ?';
+    let updateParams = [username, email];
+    
+    // If password is provided, hash it and include in update
+    if (password && password.trim() !== '') {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      updateQuery += ', password = ?';
+      updateParams.push(hashedPassword);
+      console.log('Password will be updated for user', id);
+    }
+    
+    updateQuery += ' WHERE id = ?';
+    updateParams.push(id);
+    
+    // Update user basic info (and password if provided)
+    await connection.execute(updateQuery, updateParams);
     
     // Only update roles if explicitly provided in request
     if (roles && Array.isArray(roles)) {

@@ -11,7 +11,11 @@ class OCPPServer {
   }
 
   start() {
-    this.wss = new WebSocket.Server({ port: this.port });
+    this.wss = new WebSocket.Server({
+      port: this.port,
+      host: '0.0.0.0'
+    });
+
     
     this.wss.on('connection', (ws, req) => {
       const chargePointId = this.extractChargePointId(req.url);
@@ -68,37 +72,67 @@ class OCPPServer {
     try {
       console.log('Full message array:', JSON.stringify(message));
       
-      const [messageType, messageId, action, payload] = message;
+      const [messageType, messageId, actionOrPayload, payload] = message;
       
       console.log('Parsed values:', {
         messageType,
         messageId, 
-        action,
-        payload: JSON.stringify(payload)
+        actionOrPayload,
+        payload: payload ? JSON.stringify(payload) : 'undefined'
       });
       
-      // Validate required fields
-      if (!action || typeof action !== 'string') {
-        console.error('Invalid action:', action);
-        return;
-      }
-      
-      console.log(`📨 Received from ${chargePointId}: ${action}`, payload);
-      
-      // Ensure charging station exists FIRST
-      await this.ensureStationExists(chargePointId);
-      
-      if (this.messageHandlers[action]) {
-        const response = await this.messageHandlers[action](chargePointId, payload);
-        console.log(`📤 Sending response to ${chargePointId}:`, response);
-        this.sendCallResult(ws, messageId, response);
+      // Handle different message types
+      if (messageType === 2) {
+        // CALL - Request from charging station
+        const action = actionOrPayload;
         
-        // Log message AFTER successful processing
-        await this.logMessage(chargePointId, 'Call', action, messageId, payload);
+        // Validate required fields
+        if (!action || typeof action !== 'string') {
+          console.error('Invalid action:', action);
+          return;
+        }
+        
+        console.log(`📨 Received from ${chargePointId}: ${action}`, payload);
+        
+        // Ensure charging station exists FIRST
+        await this.ensureStationExists(chargePointId);
+        
+        if (this.messageHandlers[action]) {
+          const response = await this.messageHandlers[action](chargePointId, payload);
+          console.log(`📤 Sending response to ${chargePointId}:`, response);
+          this.sendCallResult(ws, messageId, response);
+          
+          // Log message AFTER successful processing
+          await this.logMessage(chargePointId, 'Call', action, messageId, payload);
+        } else {
+          console.error(`❌ Unknown action: ${action}`);
+          this.sendCallError(ws, messageId, 'NotSupported', `Action ${action} is not supported`);
+        }
+        
+      } else if (messageType === 3) {
+        // CALLRESULT - Response from charging station to our command
+        const responsePayload = actionOrPayload;
+        console.log(`✅ Received response from ${chargePointId} for message ${messageId}:`, responsePayload);
+        
+        // Handle the response (e.g., update pending requests, notify frontend)
+        this.handleCallResult(chargePointId, messageId, responsePayload);
+        
+      } else if (messageType === 4) {
+        // CALLERROR - Error response from charging station
+        const [errorCode, errorDescription, errorDetails] = [actionOrPayload, payload, message[4]];
+        console.error(`❌ Error from ${chargePointId} for message ${messageId}:`, {
+          errorCode,
+          errorDescription,
+          errorDetails
+        });
+        
+        // Handle the error
+        this.handleCallError(chargePointId, messageId, errorCode, errorDescription, errorDetails);
+        
       } else {
-        console.log(`❌ Action ${action} not implemented`);
-        this.sendCallError(ws, messageId, 'NotImplemented', `Action ${action} not implemented`);
+        console.error('❌ Unknown message type:', messageType);
       }
+      
     } catch (error) {
       console.error('Error handling message:', error);
     }
@@ -126,6 +160,10 @@ class OCPPServer {
       StatusNotification: async (chargePointId, payload) => {
         await this.updateConnectorStatus(chargePointId, payload.connectorId, payload.status);
         console.log(`📊 ${chargePointId} connector ${payload.connectorId}: ${payload.status}`);
+        
+        // Update station status based on connector status
+        await this.updateStationStatusBasedOnConnectors(chargePointId, payload.status, payload.errorCode);
+        
         return {};
       },
 
@@ -332,6 +370,18 @@ class OCPPServer {
         };
       },
 
+      // Reservation Profile
+      ReserveNow: async (chargePointId, payload) => {
+        // This would be a request FROM station TO csms (rare)
+        // Usually CSMS sends ReserveNow TO station
+        return { status: 'Accepted' };
+      },
+
+      CancelReservation: async (chargePointId, payload) => {
+        // This would be a request FROM station TO csms (rare)
+        return { status: 'Accepted' };
+      },
+
       // Configuration Profile
       GetConfiguration: async (chargePointId, payload) => {
         return {
@@ -356,6 +406,44 @@ class OCPPServer {
       'UPDATE charging_stations SET status = ?, last_heartbeat = NOW() WHERE charge_point_id = ?',
       [status, chargePointId]
     );
+  }
+
+  async updateStationStatusBasedOnConnectors(chargePointId, connectorStatus, errorCode) {
+    const connection = getConnection();
+    
+    // If any connector is Faulted or has error, mark station as Faulted
+    if (connectorStatus === 'Faulted' || (errorCode && errorCode !== 'NoError')) {
+      await this.updateStationStatus(chargePointId, 'Faulted');
+      console.log(`🚨 Station ${chargePointId} marked as Faulted due to connector status: ${connectorStatus}, error: ${errorCode}`);
+      return;
+    }
+    
+    // Check all connectors status to determine station status
+    const [connectors] = await connection.execute(`
+      SELECT c.status FROM connectors c
+      JOIN charging_stations cs ON c.charging_station_id = cs.id
+      WHERE cs.charge_point_id = ?
+    `, [chargePointId]);
+    
+    if (connectors.length === 0) {
+      await this.updateStationStatus(chargePointId, 'Available');
+      return;
+    }
+    
+    // Determine station status based on connector statuses
+    const statuses = connectors.map(c => c.status);
+    
+    if (statuses.some(s => s === 'Faulted')) {
+      await this.updateStationStatus(chargePointId, 'Faulted');
+    } else if (statuses.some(s => s === 'Occupied' || s === 'Charging')) {
+      await this.updateStationStatus(chargePointId, 'Occupied');
+    } else if (statuses.some(s => s === 'Preparing')) {
+      await this.updateStationStatus(chargePointId, 'Preparing');
+    } else if (statuses.every(s => s === 'Available')) {
+      await this.updateStationStatus(chargePointId, 'Available');
+    } else {
+      await this.updateStationStatus(chargePointId, 'Unavailable');
+    }
   }
 
   async updateHeartbeat(chargePointId) {
@@ -490,12 +578,16 @@ class OCPPServer {
     try {
       const connection = getConnection();
       
-      // Validate parameters
+      // Validate parameters and ensure correct ENUM values
       const safeChargePointId = chargePointId || 'UNKNOWN';
-      const safeMessageType = messageType || 'Call';
+      const safeMessageType = messageType === 'Call' ? 'Call' : 
+                             messageType === 'CallResult' ? 'CallResult' : 
+                             messageType === 'CallError' ? 'CallError' : 'Call';
       const safeAction = action || 'Unknown';
       const safeMessageId = messageId || uuidv4();
       const safePayload = payload ? JSON.stringify(payload) : '{}';
+      
+      console.log(`📝 Logging message: ${safeChargePointId}, ${safeMessageType}, ${safeAction}`);
       
       // Check if charging station exists first
       const [station] = await connection.execute(
@@ -529,6 +621,29 @@ class OCPPServer {
 
   sendCallError(ws, messageId, errorCode, errorDescription) {
     this.sendMessage(ws, [4, messageId, errorCode, errorDescription, {}]);
+  }
+
+  // Handle CALLRESULT responses
+  handleCallResult(chargePointId, messageId, payload) {
+    console.log(`✅ Command response from ${chargePointId}:`, payload);
+    
+    // You can store pending requests and match them with responses
+    // For now, just log the successful response
+    if (payload.status === 'Accepted') {
+      console.log(`✅ Command accepted by ${chargePointId}`);
+    } else if (payload.status === 'Rejected') {
+      console.log(`❌ Command rejected by ${chargePointId}`);
+    }
+  }
+
+  // Handle CALLERROR responses  
+  handleCallError(chargePointId, messageId, errorCode, errorDescription, errorDetails) {
+    console.error(`❌ Command error from ${chargePointId}:`, {
+      messageId,
+      errorCode,
+      errorDescription,
+      errorDetails
+    });
   }
 
   // Remote commands
@@ -575,6 +690,33 @@ class OCPPServer {
       const messageId = uuidv4();
       this.sendMessage(ws, [2, messageId, 'Reset', {
         type
+      }]);
+      return true;
+    }
+    return false;
+  }
+
+  async sendReserveNow(chargePointId, connectorId, expiryDate, idTag, reservationId) {
+    const ws = this.clients.get(chargePointId);
+    if (ws) {
+      const messageId = uuidv4();
+      this.sendMessage(ws, [2, messageId, 'ReserveNow', {
+        connectorId,
+        expiryDate,
+        idTag,
+        reservationId
+      }]);
+      return true;
+    }
+    return false;
+  }
+
+  async sendCancelReservation(chargePointId, reservationId) {
+    const ws = this.clients.get(chargePointId);
+    if (ws) {
+      const messageId = uuidv4();
+      this.sendMessage(ws, [2, messageId, 'CancelReservation', {
+        reservationId
       }]);
       return true;
     }

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mobile Test</title>
+    <style>
+        .mobile-menu {
+            display: none;
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: red;
+            color: white;
+            padding: 10px;
+            z-index: 9999;
+        }
+        
+        @media (max-width: 768px) {
+            .mobile-menu {
+                display: block !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="mobile-menu">MOBILE DETECTED</div>
+    <h1>Mobile Test</h1>
+    <p>Screen width: <span id="width"></span>px</p>
+    
+    <script>
+        function updateWidth() {
+            document.getElementById('width').textContent = window.innerWidth;
+        }
+        updateWidth();
+        window.addEventListener('resize', updateWidth);
+    </script>
+</body>
+</html>

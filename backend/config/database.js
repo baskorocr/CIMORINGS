@@ -1,36 +1,45 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
+let pool;
+
 const dbConfig = {
-  host: process.env.DB_HOST || 'localhost',
+  host: process.env.DB_HOST || '127.0.0.1',
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'csms_db'
+  database: process.env.DB_NAME || 'csms_db',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
 };
-
-let connection;
 
 const connectDB = async () => {
   try {
-    // First connect without database to create it
-    const tempConnection = await mysql.createConnection({
+    if (pool) {
+      return pool;
+    }
+
+    // 1️⃣ Buat database kalau belum ada (pakai temp connection)
+    const temp = await mysql.createConnection({
       host: dbConfig.host,
       user: dbConfig.user,
       password: dbConfig.password
     });
-    
-    await tempConnection.execute(`CREATE DATABASE IF NOT EXISTS ${dbConfig.database}`);
-    await tempConnection.end();
-    
-    // Now connect with database
-    connection = await mysql.createConnection(dbConfig);
-    console.log('MySQL Connected to', dbConfig.database);
-    
-    // Create tables
+
+    await temp.execute(`CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\``);
+    await temp.end();
+
+    // 2️⃣ Buat POOL (INI PENTING)
+    pool = mysql.createPool(dbConfig);
+
+    console.log('✅ MySQL Pool Connected to', dbConfig.database);
+
+    // 3️⃣ Buat tabel (pakai pool)
     await createTables();
-    return connection;
+
+    return pool;
   } catch (error) {
-    console.error('Database connection error:', error);
+    console.error('❌ Database connection error:', error);
     throw error;
   }
 };
@@ -45,25 +54,31 @@ const createTables = async () => {
       role ENUM('admin', 'operator') DEFAULT 'operator',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
-    
+
     `CREATE TABLE IF NOT EXISTS charging_stations (
       id INT AUTO_INCREMENT PRIMARY KEY,
       charge_point_id VARCHAR(50) UNIQUE NOT NULL,
       name VARCHAR(100) NOT NULL,
       location VARCHAR(255),
-      status ENUM('Available', 'Occupied', 'Faulted', 'Unavailable', 'Reserved', 'Preparing', 'Charging', 'SuspendedEVSE', 'SuspendedEV', 'Finishing') DEFAULT 'Unavailable',
+      status ENUM(
+        'Available','Occupied','Faulted','Unavailable','Reserved',
+        'Preparing','Charging','SuspendedEVSE','SuspendedEV','Finishing'
+      ) DEFAULT 'Unavailable',
       last_heartbeat TIMESTAMP NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
-    
+
     `CREATE TABLE IF NOT EXISTS connectors (
       id INT AUTO_INCREMENT PRIMARY KEY,
       charging_station_id INT,
       connector_id INT NOT NULL,
-      status ENUM('Available', 'Occupied', 'Reserved', 'Unavailable', 'Faulted', 'Preparing', 'Charging', 'SuspendedEVSE', 'SuspendedEV', 'Finishing') DEFAULT 'Available',
+      status ENUM(
+        'Available','Occupied','Reserved','Unavailable','Faulted',
+        'Preparing','Charging','SuspendedEVSE','SuspendedEV','Finishing'
+      ) DEFAULT 'Available',
       FOREIGN KEY (charging_station_id) REFERENCES charging_stations(id) ON DELETE CASCADE
     )`,
-    
+
     `CREATE TABLE IF NOT EXISTS transactions (
       id INT AUTO_INCREMENT PRIMARY KEY,
       transaction_id INT UNIQUE NOT NULL,
@@ -74,57 +89,52 @@ const createTables = async () => {
       meter_stop INT DEFAULT 0,
       start_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       stop_timestamp TIMESTAMP NULL,
-      status ENUM('active', 'completed', 'stopped') DEFAULT 'active',
+      status ENUM('active','completed','stopped') DEFAULT 'active',
       energy_consumed DECIMAL(10,3) DEFAULT 0.000,
       max_power DECIMAL(8,2) DEFAULT 0.00,
       soc DECIMAL(5,2) DEFAULT NULL,
       FOREIGN KEY (charging_station_id) REFERENCES charging_stations(id) ON DELETE CASCADE
     )`,
-    
+
     `CREATE TABLE IF NOT EXISTS ocpp_messages (
       id INT AUTO_INCREMENT PRIMARY KEY,
       charge_point_id VARCHAR(50),
-      message_type ENUM('Call', 'CallResult', 'CallError'),
+      message_type ENUM('Call','CallResult','CallError'),
       action VARCHAR(50),
       message_id VARCHAR(36),
       payload JSON,
       timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (charge_point_id) REFERENCES charging_stations(charge_point_id) ON DELETE CASCADE
+      FOREIGN KEY (charge_point_id)
+        REFERENCES charging_stations(charge_point_id)
+        ON DELETE CASCADE
     )`
   ];
 
-  for (const table of tables) {
-    await connection.execute(table);
+  for (const sql of tables) {
+    await pool.execute(sql);
   }
-  
-  // Add missing columns if they don't exist
-  try {
-    await connection.execute('ALTER TABLE transactions ADD COLUMN energy_consumed DECIMAL(10,3) DEFAULT 0.000');
-  } catch (e) { /* Column already exists */ }
-  
-  try {
-    await connection.execute('ALTER TABLE transactions ADD COLUMN max_power DECIMAL(8,2) DEFAULT 0.00');
-  } catch (e) { /* Column already exists */ }
-  
-  try {
-    await connection.execute('ALTER TABLE transactions ADD COLUMN soc DECIMAL(5,2) DEFAULT NULL');
-  } catch (e) { /* Column already exists */ }
-  
-  // Update existing connectors to Available status
-  await connection.execute('UPDATE connectors SET status = "Available" WHERE status = "Unavailable"');
-  
-  // Insert default admin user
-  const adminExists = await connection.execute('SELECT id FROM users WHERE username = ?', ['admin']);
-  if (adminExists[0].length === 0) {
+
+  // Insert default admin
+  const [rows] = await pool.execute(
+    'SELECT id FROM users WHERE username = ?',
+    ['admin']
+  );
+
+  if (rows.length === 0) {
     const bcrypt = require('bcryptjs');
-    const hashedPassword = await bcrypt.hash('admin123', 10);
-    await connection.execute(
+    const hashed = await bcrypt.hash('admin123', 10);
+    await pool.execute(
       'INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)',
-      ['admin', 'admin@csms.com', hashedPassword, 'admin']
+      ['admin', 'admin@csms.com', hashed, 'admin']
     );
   }
 };
 
-const getConnection = () => connection;
+const getConnection = () => {
+  if (!pool) {
+    throw new Error('Database not initialized');
+  }
+  return pool;
+};
 
 module.exports = { connectDB, getConnection };

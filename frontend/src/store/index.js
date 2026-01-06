@@ -85,6 +85,19 @@ export default createStore({
     logout({ commit }) {
       commit('CLEAR_AUTH')
     },
+
+    async fetchUserProfile({ commit }) {
+      try {
+        // User profile is already stored in token, but we can refresh it if needed
+        const token = localStorage.getItem('token')
+        if (token) {
+          const payload = JSON.parse(atob(token.split('.')[1]))
+          commit('SET_USER', payload.user)
+        }
+      } catch (error) {
+        console.error('Failed to fetch user profile:', error)
+      }
+    },
     
     async fetchStations({ commit }) {
       try {

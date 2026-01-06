@@ -76,4 +76,81 @@ const register = async (req, res) => {
   }
 };
 
-module.exports = { login, register };
+const updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.id; // From JWT middleware
+    const { username, email, currentPassword, newPassword } = req.body;
+    const connection = getConnection();
+    
+    // Get current user data
+    const [users] = await connection.execute(
+      'SELECT * FROM users WHERE id = ?',
+      [userId]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const user = users[0];
+
+    // Verify current password
+    const isValidPassword = await bcrypt.compare(currentPassword, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ message: 'Current password is incorrect' });
+    }
+
+    // Prepare update query
+    let updateQuery = 'UPDATE users SET username = ?, email = ?';
+    let updateParams = [username, email];
+
+    // If new password is provided, hash it and include in update
+    if (newPassword && newPassword.trim() !== '') {
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      updateQuery += ', password = ?';
+      updateParams.push(hashedPassword);
+    }
+
+    updateQuery += ' WHERE id = ?';
+    updateParams.push(userId);
+
+    // Update user
+    await connection.execute(updateQuery, updateParams);
+
+    // Get updated user with roles and permissions
+    const updatedUser = await getUserWithRolesAndPermissions(userId);
+
+    // Generate new token with updated info
+    const token = jwt.sign(
+      { 
+        id: userId, 
+        username: username, 
+        roles: updatedUser.roles,
+        permissions: updatedUser.effective_permissions
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.json({
+      message: 'Profile updated successfully',
+      token,
+      user: {
+        id: userId,
+        username: username,
+        email: email,
+        roles: updatedUser.roles,
+        permissions: updatedUser.direct_permissions,
+        effectivePermissions: updatedUser.effective_permissions
+      }
+    });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ message: 'Username or email already exists' });
+    }
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+module.exports = { login, register, updateProfile };

@@ -33,10 +33,22 @@ const routes = [
     meta: { requiresAuth: true, permission: 'transactions.view' }
   },
   {
+    path: '/reservations',
+    name: 'Reservations',
+    component: () => import('@/views/Reservations.vue'),
+    meta: { requiresAuth: true, permission: 'view_reservations' }
+  },
+  {
     path: '/users',
     name: 'Users',
     component: () => import('@/views/Users.vue'),
     meta: { requiresAuth: true, permission: 'users.view' }
+  },
+  {
+    path: '/profile',
+    name: 'Profile',
+    component: () => import('@/views/Profile.vue'),
+    meta: { requiresAuth: true }
   }
 ]
 
