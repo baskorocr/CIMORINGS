@@ -158,7 +158,38 @@ class OCPPServer {
       },
 
       StatusNotification: async (chargePointId, payload) => {
-        await this.updateConnectorStatus(chargePointId, payload.connectorId, payload.status);
+        // Check if connector has active reservation before updating status
+        const connection = getConnection();
+        const [stations] = await connection.execute(
+          'SELECT id FROM charging_stations WHERE charge_point_id = ?',
+          [chargePointId]
+        );
+        
+        if (stations.length > 0) {
+          const stationId = stations[0].id;
+          console.log(`🔍 StatusNotification debug - stationId: ${stationId}, connectorId: ${payload.connectorId}, newStatus: ${payload.status}`);
+          
+          // Check for active reservation
+          const [reservations] = await connection.execute(`
+            SELECT * FROM reservations 
+            WHERE charging_station_id = ? AND connector_id = ? 
+            AND status = 'Active' AND expiry_date > NOW()
+          `, [stationId, payload.connectorId]);
+          
+          console.log(`🔍 Found ${reservations.length} active reservations`);
+          
+          // If there's an active reservation and status is being set to Available, keep it Reserved
+          if (reservations.length > 0 && payload.status === 'Available') {
+            console.log(`🔒 Connector ${payload.connectorId} has active reservation, keeping status as Reserved`);
+            await this.updateConnectorStatus(chargePointId, payload.connectorId, 'Reserved');
+          } else {
+            console.log(`✅ Updating connector status to ${payload.status}`);
+            await this.updateConnectorStatus(chargePointId, payload.connectorId, payload.status);
+          }
+        } else {
+          await this.updateConnectorStatus(chargePointId, payload.connectorId, payload.status);
+        }
+        
         console.log(`📊 ${chargePointId} connector ${payload.connectorId}: ${payload.status}`);
         
         // Update station status based on connector status
@@ -169,9 +200,57 @@ class OCPPServer {
 
       Authorize: async (chargePointId, payload) => {
         console.log(`🔐 Authorization request from ${chargePointId} for ${payload.idTag}`);
+        
+        const connection = getConnection();
+        
+        // First, check if there are ANY active reservations on this station
+        const [allReservations] = await connection.execute(`
+          SELECT r.* FROM reservations r
+          JOIN charging_stations cs ON r.charging_station_id = cs.id
+          WHERE cs.charge_point_id = ? AND r.status = 'Active' AND r.expiry_date > NOW()
+        `, [chargePointId]);
+        
+        if (allReservations.length > 0) {
+          // If there are reservations, only accept ID tags that have reservations
+          const hasReservation = allReservations.some(r => r.id_tag === payload.idTag);
+          
+          if (hasReservation) {
+            console.log(`✅ ID tag ${payload.idTag} has active reservation`);
+            return {
+              idTagInfo: {
+                status: 'Accepted'
+              }
+            };
+          } else {
+            console.log(`❌ ID tag ${payload.idTag} rejected - station has reservations but not for this ID tag`);
+            return {
+              idTagInfo: {
+                status: 'Rejected'
+              }
+            };
+          }
+        }
+        
+        // No reservations - check if any connector is available
+        const [availableConnectors] = await connection.execute(`
+          SELECT c.* FROM connectors c
+          JOIN charging_stations cs ON c.charging_station_id = cs.id
+          WHERE cs.charge_point_id = ? AND c.status = 'Available'
+        `, [chargePointId]);
+        
+        if (availableConnectors.length > 0) {
+          console.log(`✅ ID tag ${payload.idTag} authorized - no reservations, available connectors found`);
+          return {
+            idTagInfo: {
+              status: 'Accepted'
+            }
+          };
+        }
+        
+        console.log(`❌ ID tag ${payload.idTag} rejected - no available connectors`);
         return {
           idTagInfo: {
-            status: 'Accepted'
+            status: 'Rejected'
           }
         };
       },
@@ -179,15 +258,62 @@ class OCPPServer {
       StartTransaction: async (chargePointId, payload) => {
         console.log(`🔍 StartTransaction debug - chargePointId: ${chargePointId}, payload:`, payload);
         
-        // Check if connector is available
         const connection = getConnection();
+        
+        // Get station ID
+        const [stations] = await connection.execute(
+          'SELECT id FROM charging_stations WHERE charge_point_id = ?',
+          [chargePointId]
+        );
+        
+        if (stations.length === 0) {
+          console.log(`❌ No station found for ${chargePointId}`);
+          return {
+            transactionId: 0,
+            idTagInfo: { status: 'Rejected' }
+          };
+        }
+        
+        const stationId = stations[0].id;
+        
+        // Check for active reservation on this connector
+        const [reservations] = await connection.execute(`
+          SELECT * FROM reservations 
+          WHERE charging_station_id = ? AND connector_id = ? 
+          AND status = 'Active' AND expiry_date > NOW()
+        `, [stationId, payload.connectorId]);
+        
+        // If there are active reservations, find one that matches the ID tag
+        if (reservations.length > 0) {
+          console.log(`🔍 Found ${reservations.length} active reservations for connector ${payload.connectorId}`);
+          
+          // Find reservation that matches the provided ID tag
+          const matchingReservation = reservations.find(r => r.id_tag === payload.idTag);
+          
+          if (!matchingReservation) {
+            console.log(`❌ No reservation found for ID tag: ${payload.idTag}`);
+            console.log(`Available reservations:`, reservations.map(r => r.id_tag));
+            return {
+              transactionId: 0,
+              idTagInfo: { status: 'Rejected' }
+            };
+          }
+          
+          console.log(`✅ Reservation validated for ID tag: ${payload.idTag}`);
+          
+          // Update reservation status to Used
+          await connection.execute(
+            'UPDATE reservations SET status = "Used" WHERE id = ?',
+            [matchingReservation.id]
+          );
+        }
+        
+        // Check connector status
         const [connectors] = await connection.execute(`
-          SELECT c.status, cs.id as station_id FROM connectors c
+          SELECT c.status FROM connectors c
           JOIN charging_stations cs ON c.charging_station_id = cs.id
           WHERE cs.charge_point_id = ? AND c.connector_id = ?
         `, [chargePointId, payload.connectorId]);
-        
-        console.log(`🔍 Connector query result:`, connectors);
         
         if (connectors.length === 0) {
           console.log(`❌ No connector found for ${chargePointId} connector ${payload.connectorId}`);
@@ -197,19 +323,18 @@ class OCPPServer {
           };
         }
         
-        // Accept Available or Preparing status for StartTransaction
-        const acceptableStatuses = ['Available', 'Preparing'];
+        // Accept Available, Preparing, or Reserved status for StartTransaction
+        const acceptableStatuses = ['Available', 'Preparing', 'Reserved'];
         if (!acceptableStatuses.includes(connectors[0].status)) {
-          console.log(`❌ Connector status is ${connectors[0].status}, not in acceptable statuses: ${acceptableStatuses.join(', ')}`);
+          console.log(`❌ Connector status is ${connectors[0].status}, not acceptable`);
           return {
             transactionId: 0,
             idTagInfo: { status: 'Rejected' }
           };
         }
         
-        console.log(`✅ Connector is ready (${connectors[0].status}), creating transaction...`);
+        console.log(`✅ Creating transaction for ${chargePointId}`);
         const transactionId = await this.createTransaction(chargePointId, payload);
-        console.log(`🔋 Created transaction ${transactionId}`);
         
         // Update connector status to Occupied
         await this.updateConnectorStatus(chargePointId, payload.connectorId, 'Occupied');
@@ -396,6 +521,15 @@ class OCPPServer {
 
       ChangeConfiguration: async (chargePointId, payload) => {
         return { status: 'Accepted' };
+      },
+
+      // Data Transfer Profile
+      DataTransfer: async (chargePointId, payload) => {
+        console.log(`📊 DataTransfer from ${chargePointId}:`, payload);
+        return { 
+          status: 'Accepted',
+          data: payload.data || ''
+        };
       }
     };
   }

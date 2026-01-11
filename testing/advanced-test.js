@@ -94,11 +94,15 @@ class AdvancedOCPPTester {
     console.log(`📨 Response:`, payload);
     
     // Handle StartTransaction response
-    if (payload.transactionId) {
+    if (payload.transactionId && payload.transactionId > 0) {
       this.transactionId = payload.transactionId;
       console.log(`🔋 Transaction started: ${this.transactionId}`);
       this.isCharging = true;
       this.startMeterValues();
+    } else if (payload.transactionId === 0) {
+      console.log(`❌ Transaction rejected - stopping test`);
+      this.isCharging = false;
+      this.transactionRejected = true;
     }
   }
 
@@ -305,7 +309,15 @@ class AdvancedOCPPTester {
       this.sendStartTransaction('ADVANCED_TAG_001');
       await this.sleep(2000);
 
-      // 6. Status Notification - Charging
+      // Check if transaction was rejected
+      if (this.transactionRejected) {
+        console.log('❌ Transaction was rejected - setting status back to Available');
+        this.sendStatusNotification(1, 'Available');
+        console.log('🛑 Test stopped due to transaction rejection');
+        return;
+      }
+
+      // 6. Status Notification - Charging (only if transaction succeeded)
       console.log('6️⃣ Setting status to Charging...');
       this.sendStatusNotification(1, 'Charging');
       await this.sleep(1000);

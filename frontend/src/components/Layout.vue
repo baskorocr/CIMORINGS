@@ -121,6 +121,10 @@
                   <el-icon><User /></el-icon>
                   Profile
                 </el-dropdown-item>
+                <el-dropdown-item command="docs">
+                  <el-icon><Document /></el-icon>
+                  API Docs
+                </el-dropdown-item>
                 <el-dropdown-item command="settings">
                   <el-icon><Setting /></el-icon>
                   Settings
@@ -216,6 +220,8 @@ export default {
         this.$router.push('/login')
       } else if (command === 'profile') {
         this.$router.push('/profile')
+      } else if (command === 'docs') {
+        this.$router.push('/docs')
       } else if (command === 'settings') {
         this.$router.push('/profile')
       }

@@ -2,18 +2,17 @@ const express = require('express');
 const router = express.Router();
 const reserveController = require('../controllers/reserveController');
 const { authenticateToken } = require('../middleware/auth');
-const { checkPermission } = require('../middleware/permission');
 
 // Get all reservations
-router.get('/', authenticateToken, checkPermission('view_reservations'), reserveController.getReservations);
+router.get('/', authenticateToken, reserveController.getReservations);
 
 // Get reservation by ID
-router.get('/:reservation_id', authenticateToken, checkPermission('view_reservations'), reserveController.getReservation);
+router.get('/:reservation_id', authenticateToken, reserveController.getReservation);
 
 // Create reservation (ReserveNow)
-router.post('/', authenticateToken, checkPermission('manage_reservations'), reserveController.createReservation);
+router.post('/', authenticateToken, reserveController.createReservation);
 
 // Cancel reservation
-router.delete('/:reservation_id', authenticateToken, checkPermission('manage_reservations'), reserveController.cancelReservation);
+router.delete('/:reservation_id', authenticateToken, reserveController.cancelReservation);
 
 module.exports = router;

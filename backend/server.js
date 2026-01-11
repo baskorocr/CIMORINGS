@@ -13,6 +13,7 @@ const monitoringRoutes = require('./routes/monitoring');
 const userRoutes = require('./routes/users');
 const roleRoutes = require('./routes/roles');
 const reservationRoutes = require('./routes/reservations');
+const docsRoutes = require('./routes/docs');
 const reserveController = require('./controllers/reserveController');
 
 const app = express();
@@ -31,7 +32,10 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Routes
+// Public documentation routes (MUST be before other /api routes)
+app.use('/docs', docsRoutes);
+
+// Protected routes (with auth middleware)
 app.use('/api/auth', authRoutes);
 app.use('/api', stationRoutes);
 app.use('/api', monitoringRoutes);

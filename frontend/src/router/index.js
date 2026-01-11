@@ -49,6 +49,12 @@ const routes = [
     name: 'Profile',
     component: () => import('@/views/Profile.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/docs',
+    name: 'ApiDocs',
+    component: () => import('@/views/ApiDocs.vue'),
+    meta: { requiresAuth: true }
   }
 ]
 

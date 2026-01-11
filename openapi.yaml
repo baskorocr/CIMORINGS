@@ -1,0 +1,992 @@
+openapi: 3.0.3
+info:
+  title: CIMORINGS - Charging Integration Monitoring System API
+  description: |
+    Sistem manajemen stasiun pengisian dengan protokol OCPP 1.6 lengkap.
+    
+    ## Features
+    - OCPP 1.6 Protocol Support
+    - Real-time WebSocket Updates
+    - JWT Authentication
+    - Dynamic Role Management
+    - Station & Transaction Management
+    
+    ## WebSocket Events
+    WebSocket server tersedia di `ws://localhost:3000` dengan events:
+    - `transaction_started` - Transaksi dimulai
+    - `transaction_stopped` - Transaksi berhenti
+    - `station_status_updated` - Status stasiun berubah
+    - `connector_status_updated` - Status connector berubah
+    
+  version: 1.0.0
+  contact:
+    name: CIMORINGS API Support
+    email: support@cimorings.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3000
+    description: Development server
+  - url: https://cgs-csms.dharmap.com
+    description: Production server
+
+security:
+  - bearerAuth: []
+
+paths:
+  # Authentication
+  /api/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticate user and get JWT token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                  example: admin
+                password:
+                  type: string
+                  example: admin123
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  user:
+                    $ref: '#/components/schemas/User'
+                  permissions:
+                    type: array
+                    items:
+                      type: string
+                    example: ["view_stations", "manage_users"]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+                - email
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                email:
+                  type: string
+                  format: email
+      responses:
+        '201':
+          description: User registered successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # Stations
+  /api/stations:
+    get:
+      tags:
+        - Stations
+      summary: Get all charging stations
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: List of charging stations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Station'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+    post:
+      tags:
+        - Stations
+      summary: Create new charging station
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - charge_point_id
+                - name
+                - location
+              properties:
+                charge_point_id:
+                  type: string
+                  example: CS001
+                name:
+                  type: string
+                  example: Station Cikarang
+                location:
+                  type: string
+                  example: Jl. Raya Cikarang
+      responses:
+        '201':
+          description: Station created successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/stations/{id}:
+    get:
+      tags:
+        - Stations
+      summary: Get station by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Station details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StationDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Stations
+      summary: Update station
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                location:
+                  type: string
+      responses:
+        '200':
+          description: Station updated successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Stations
+      summary: Delete station
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Station deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # Transactions
+  /api/transactions:
+    get:
+      tags:
+        - Transactions
+      summary: Get all transactions
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, completed]
+      responses:
+        '200':
+          description: List of transactions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transactions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  /api/transactions/active:
+    get:
+      tags:
+        - Transactions
+      summary: Get active transactions
+      responses:
+        '200':
+          description: List of active transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+
+  /api/transactions/completed:
+    get:
+      tags:
+        - Transactions
+      summary: Get completed transactions
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: List of completed transactions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transactions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  # Users & Roles
+  /api/users:
+    get:
+      tags:
+        - Users
+      summary: Get all users
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+
+    post:
+      tags:
+        - Users
+      summary: Create new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+                - email
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                email:
+                  type: string
+                  format: email
+      responses:
+        '201':
+          description: User created successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/users/{id}:
+    put:
+      tags:
+        - Users
+      summary: Update user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: User updated successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Users
+      summary: Delete user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: User deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/users/{id}/roles:
+    post:
+      tags:
+        - Users
+      summary: Assign roles to user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                roleIds:
+                  type: array
+                  items:
+                    type: integer
+      responses:
+        '200':
+          description: Roles assigned successfully
+
+  # Roles
+  /api/roles:
+    get:
+      tags:
+        - Roles
+      summary: Get all roles
+      responses:
+        '200':
+          description: List of roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Role'
+
+    post:
+      tags:
+        - Roles
+      summary: Create new role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: Station Manager
+                description:
+                  type: string
+                  example: Manage charging stations
+      responses:
+        '201':
+          description: Role created successfully
+
+  /api/roles/permissions:
+    get:
+      tags:
+        - Roles
+      summary: Get all permissions
+      responses:
+        '200':
+          description: List of permissions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Permission'
+
+    post:
+      tags:
+        - Roles
+      summary: Create new permission
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: view_stations
+                description:
+                  type: string
+                  example: View charging stations
+      responses:
+        '201':
+          description: Permission created successfully
+
+  # Dashboard
+  /api/dashboard/stats:
+    get:
+      tags:
+        - Dashboard
+      summary: Get dashboard statistics
+      responses:
+        '200':
+          description: Dashboard statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalStations:
+                    type: integer
+                    example: 25
+                  activeTransactions:
+                    type: integer
+                    example: 8
+                  totalEnergy:
+                    type: number
+                    format: float
+                    example: 1250.5
+                  connectedStations:
+                    type: integer
+                    example: 20
+
+  /api/connected-stations:
+    get:
+      tags:
+        - Dashboard
+      summary: Get connected stations
+      responses:
+        '200':
+          description: List of connected stations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Station'
+
+  # OCPP Remote Commands
+  /api/ocpp/remote-start:
+    post:
+      tags:
+        - OCPP Commands
+      summary: Send RemoteStartTransaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - chargePointId
+                - idTag
+              properties:
+                chargePointId:
+                  type: string
+                  example: CS001
+                idTag:
+                  type: string
+                  example: USER123
+                connectorId:
+                  type: integer
+                  example: 1
+      responses:
+        '200':
+          description: Command sent successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/ocpp/remote-stop:
+    post:
+      tags:
+        - OCPP Commands
+      summary: Send RemoteStopTransaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - chargePointId
+                - transactionId
+              properties:
+                chargePointId:
+                  type: string
+                  example: CS001
+                transactionId:
+                  type: integer
+                  example: 12345
+      responses:
+        '200':
+          description: Command sent successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/ocpp/unlock-connector:
+    post:
+      tags:
+        - OCPP Commands
+      summary: Send UnlockConnector
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - chargePointId
+                - connectorId
+              properties:
+                chargePointId:
+                  type: string
+                  example: CS001
+                connectorId:
+                  type: integer
+                  example: 1
+      responses:
+        '200':
+          description: Command sent successfully
+
+  /api/ocpp/reset:
+    post:
+      tags:
+        - OCPP Commands
+      summary: Send Reset command
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - chargePointId
+                - type
+              properties:
+                chargePointId:
+                  type: string
+                  example: CS001
+                type:
+                  type: string
+                  enum: [Hard, Soft]
+                  example: Soft
+      responses:
+        '200':
+          description: Command sent successfully
+
+  # Reservations
+  /api/reservations:
+    get:
+      tags:
+        - Reservations
+      summary: Get all reservations
+      responses:
+        '200':
+          description: List of reservations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Reservation'
+
+    post:
+      tags:
+        - Reservations
+      summary: Create reservation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - chargingStationId
+                - connectorId
+                - idTag
+                - expiryDate
+              properties:
+                chargingStationId:
+                  type: integer
+                  example: 1
+                connectorId:
+                  type: integer
+                  example: 1
+                idTag:
+                  type: string
+                  example: USER123
+                expiryDate:
+                  type: string
+                  format: date-time
+                  example: "2026-01-12T10:00:00Z"
+                userName:
+                  type: string
+                  example: John Doe
+                phoneNumber:
+                  type: string
+                  example: "+6281234567890"
+      responses:
+        '201':
+          description: Reservation created successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        username:
+          type: string
+          example: admin
+        email:
+          type: string
+          format: email
+          example: admin@example.com
+        created_at:
+          type: string
+          format: date-time
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+
+    Role:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Administrator
+        description:
+          type: string
+          example: Full system access
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+
+    Permission:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: view_stations
+        description:
+          type: string
+          example: View charging stations
+
+    Station:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        charge_point_id:
+          type: string
+          example: CS001
+        name:
+          type: string
+          example: Station Cikarang
+        location:
+          type: string
+          example: Jl. Raya Cikarang
+        status:
+          type: string
+          enum: [Available, Occupied, Reserved, Unavailable, Faulted]
+          example: Available
+        last_heartbeat:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        connector_count:
+          type: integer
+          example: 2
+
+    StationDetail:
+      allOf:
+        - $ref: '#/components/schemas/Station'
+        - type: object
+          properties:
+            connectors:
+              type: array
+              items:
+                $ref: '#/components/schemas/Connector'
+
+    Connector:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        connector_id:
+          type: integer
+          example: 1
+        charging_station_id:
+          type: integer
+          example: 1
+        status:
+          type: string
+          enum: [Available, Occupied, Reserved, Unavailable, Faulted, Preparing, Charging, SuspendedEVSE, SuspendedEV, Finishing]
+          example: Available
+        error_code:
+          type: string
+          example: NoError
+        last_updated:
+          type: string
+          format: date-time
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        transaction_id:
+          type: integer
+          example: 12345
+        charging_station_id:
+          type: integer
+          example: 1
+        connector_id:
+          type: integer
+          example: 1
+        id_tag:
+          type: string
+          example: USER123
+        meter_start:
+          type: integer
+          example: 1000
+        meter_stop:
+          type: integer
+          example: 1500
+        start_timestamp:
+          type: string
+          format: date-time
+        stop_timestamp:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [active, completed]
+          example: active
+        energy_consumed:
+          type: number
+          format: decimal
+          example: 15.5
+        max_power:
+          type: number
+          format: decimal
+          example: 22.0
+        soc:
+          type: integer
+          example: 85
+        station_name:
+          type: string
+          example: Station Cikarang
+
+    Reservation:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        reservation_id:
+          type: integer
+          example: 123456
+        charging_station_id:
+          type: integer
+          example: 1
+        connector_id:
+          type: integer
+          example: 1
+        id_tag:
+          type: string
+          example: USER123
+        expiry_date:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [Active, Used, Cancelled, Expired]
+          example: Active
+        user_name:
+          type: string
+          example: John Doe
+        phone_number:
+          type: string
+          example: "+6281234567890"
+        created_at:
+          type: string
+          format: date-time
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        total:
+          type: integer
+          example: 100
+        totalPages:
+          type: integer
+          example: 10
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Invalid request
+        message:
+          type: string
+          example: The request body is invalid
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+tags:
+  - name: Authentication
+    description: User authentication and authorization
+  - name: Stations
+    description: Charging station management
+  - name: Transactions
+    description: Charging transaction management
+  - name: Users
+    description: User management
+  - name: Roles
+    description: Role and permission management
+  - name: Dashboard
+    description: Dashboard statistics and monitoring
+  - name: OCPP Commands
+    description: Remote OCPP commands
+  - name: Reservations
+    description: Charging station reservations
