@@ -68,7 +68,8 @@
 
       <!-- Desktop Table View -->
       <el-card class="mobile-hidden">
-        <el-table :data="transactions" v-loading="loading" style="width: 100%">
+        <div class="table-responsive">
+          <el-table :data="transactions" v-loading="loading" style="width: 100%">
           <el-table-column prop="transaction_id" label="Transaction ID" />
           <el-table-column prop="station_name" label="Station" />
           <el-table-column prop="connector_id" label="Connector" />
@@ -96,7 +97,8 @@
               </el-button>
             </template>
           </el-table-column>
-        </el-table>
+          </el-table>
+        </div>
         
         <!-- Desktop Pagination -->
         <div class="pagination-wrapper">
@@ -167,7 +169,11 @@ export default {
   },
   
   computed: {
-    ...mapState(['transactions', 'transactionsPagination', 'loading'])
+    ...mapState(['transactions', 'transactionsPagination', 'loading', 'user']),
+    
+    isAdminOrSuperAdmin() {
+      return this.user?.role === 'admin' || this.user?.role === 'super_admin'
+    }
   },
   
   async created() {
@@ -188,10 +194,17 @@ export default {
     ...mapActions(['fetchTransactions']),
     
     async loadTransactions() {
-      await this.fetchTransactions({ 
+      const params = { 
         page: this.currentPage, 
         limit: this.pageSize 
-      })
+      }
+      
+      // Add user filter if not admin/super_admin
+      if (!this.isAdminOrSuperAdmin) {
+        params.user_id = this.user?.id
+      }
+      
+      await this.fetchTransactions(params)
     },
 
     async loadMobileTransactions(reset = false) {
@@ -201,10 +214,17 @@ export default {
         this.loadingMore = true
         const page = reset ? 1 : Math.floor(this.allTransactions.length / this.mobilePageSize) + 1
         
-        const response = await this.$store.dispatch('fetchTransactions', { 
+        const params = { 
           page, 
           limit: this.mobilePageSize 
-        })
+        }
+        
+        // Add user filter if not admin/super_admin
+        if (!this.isAdminOrSuperAdmin) {
+          params.user_id = this.user?.id
+        }
+        
+        const response = await this.$store.dispatch('fetchTransactions', params)
         
         if (reset) {
           this.allTransactions = this.transactions

@@ -247,7 +247,9 @@ export default {
 <style scoped>
 .layout-container {
   height: 100vh;
+  width: 100%;
   position: relative;
+  overflow: hidden;
 }
 
 /* Sidebar Styles */
@@ -268,6 +270,14 @@ export default {
   align-items: center;
   justify-content: center;
   gap: 10px;
+  transition: all 0.3s ease;
+}
+
+/* Collapsed logo state */
+.sidebar-menu.el-menu--collapse ~ .logo,
+.el-menu--collapse + .logo {
+  padding: 20px 10px;
+  gap: 0;
 }
 
 .logo-icon {
@@ -301,9 +311,24 @@ export default {
   transition: all 0.3s ease;
 }
 
+/* Collapsed state adjustments */
+.sidebar-menu.el-menu--collapse .menu-item {
+  margin: 5px 0;
+  text-align: center;
+  padding: 0 !important;
+}
+
+.sidebar-menu.el-menu--collapse .menu-item .el-icon {
+  margin-right: 0 !important;
+}
+
 .menu-item:hover {
   background: rgba(255, 255, 255, 0.1) !important;
   transform: translateX(5px);
+}
+
+.sidebar-menu.el-menu--collapse .menu-item:hover {
+  transform: none;
 }
 
 .menu-item.is-active {

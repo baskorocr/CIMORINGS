@@ -34,6 +34,7 @@ html, body {
   min-height: 100vh;
   width: 100%;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  overflow-x: hidden;
 }
 
 /* Global responsive utilities */

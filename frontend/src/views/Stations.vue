@@ -22,8 +22,8 @@
       </div>
 
       <!-- Stats Cards -->
-      <div class="stats-grid">
-        <div class="stat-card">
+      <div class="stats-grid grid grid-1 grid-sm-2 grid-md-4">
+        <div class="stat-card card">
           <div class="stat-icon available">
             <el-icon><Position /></el-icon>
           </div>
@@ -33,7 +33,7 @@
           </div>
         </div>
         
-        <div class="stat-card">
+        <div class="stat-card card">
           <div class="stat-icon occupied">
             <el-icon><Lightning /></el-icon>
           </div>
@@ -43,7 +43,7 @@
           </div>
         </div>
         
-        <div class="stat-card">
+        <div class="stat-card card">
           <div class="stat-icon total">
             <el-icon><Monitor /></el-icon>
           </div>
@@ -154,12 +154,13 @@
 
         <!-- Table View -->
         <el-card v-else class="table-card">
-          <el-table 
-            :data="filteredStations" 
-            v-loading="loading" 
-            class="stations-table"
-            @row-click="viewStation"
-          >
+          <div class="table-responsive">
+            <el-table 
+              :data="filteredStations" 
+              v-loading="loading" 
+              class="stations-table"
+              @row-click="viewStation"
+            >
             <el-table-column prop="charge_point_id" label="Charge Point ID" min-width="150" />
             <el-table-column prop="name" label="Name" min-width="150" />
             <el-table-column prop="location" label="Location" min-width="200" />
@@ -187,7 +188,8 @@
                 </el-button>
               </template>
             </el-table-column>
-          </el-table>
+            </el-table>
+          </div>
         </el-card>
       </div>
       
@@ -869,9 +871,6 @@ export default {
 
 /* Stats Grid */
 .stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
   margin-bottom: 30px;
 }
 

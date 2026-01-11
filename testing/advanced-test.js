@@ -2,7 +2,7 @@ const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
 
 class AdvancedOCPPTester {
-  constructor(chargePointId = 'ADVANCED_TEST_01', serverUrl = 'ws://localhost:8080') {
+  constructor(chargePointId = 'ADVANCED_TEST_01', serverUrl = 'ws://cgs-csms.dharmap.com:7865') {
     this.chargePointId = chargePointId;
     this.serverUrl = `${serverUrl}/${chargePointId}`;
     this.ws = null;

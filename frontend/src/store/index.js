@@ -111,10 +111,10 @@ export default createStore({
       }
     },
     
-    async fetchTransactions({ commit }, { page = 1, limit = 10 } = {}) {
+    async fetchTransactions({ commit }, { page = 1, limit = 10, user_id = null } = {}) {
       try {
         commit('SET_LOADING', true)
-        const response = await stationAPI.getTransactions(page, limit)
+        const response = await stationAPI.getTransactions(page, limit, user_id)
         commit('SET_TRANSACTIONS', response.data)
       } catch (error) {
         console.error('Failed to fetch transactions:', error)

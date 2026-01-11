@@ -82,7 +82,8 @@
 
           <!-- Desktop Table View -->
           <el-card class="mobile-hidden">
-            <el-table :data="users" v-loading="loading">
+            <div class="table-responsive">
+              <el-table :data="users" v-loading="loading">
               <el-table-column prop="id" label="ID" width="80" />
               <el-table-column prop="username" label="Username" />
               <el-table-column prop="email" label="Email" />
@@ -130,7 +131,8 @@
                   </el-button>
                 </template>
               </el-table-column>
-            </el-table>
+              </el-table>
+            </div>
 
             <el-pagination
               v-model:current-page="pagination.page"
