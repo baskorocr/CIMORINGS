@@ -12,22 +12,35 @@ const stationRoutes = require('./routes/stations');
 const monitoringRoutes = require('./routes/monitoring');
 const userRoutes = require('./routes/users');
 const roleRoutes = require('./routes/roles');
-const reservationRoutes = require('./routes/reservations');
+// const reservationRoutes = require('./routes/reservations');
 const docsRoutes = require('./routes/docs');
-const reserveController = require('./controllers/reserveController');
+// const reserveController = require('./controllers/reserveController');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:8080", "http://localhost:8081", "http://192.168.0.109:8081"],
+    origin: [
+      "http://localhost:8080", 
+      "http://localhost:8081", 
+      "http://192.168.0.109:8081",
+      "https://cgs-csms.dharmap.com",
+      "http://cgs-csms.dharmap.com"
+    ],
     methods: ["GET", "POST"]
   }
 });
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:8080', 'http://localhost:8081', 'http://192.168.0.109:8081', 'http://192.168.0.109:8080'],
+  origin: [
+    'http://localhost:8080', 
+    'http://localhost:8081', 
+    'http://192.168.0.109:8081', 
+    'http://192.168.0.109:8080',
+    'https://cgs-csms.dharmap.com',
+    'http://cgs-csms.dharmap.com'
+  ],
   credentials: true
 }));
 app.use(express.json());
@@ -41,11 +54,20 @@ app.use('/api', stationRoutes);
 app.use('/api', monitoringRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/roles', roleRoutes);
-app.use('/api/reservations', reservationRoutes);
+// app.use('/api/reservations', reservationRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// Debug endpoint to check auth headers
+app.get('/debug-auth', (req, res) => {
+  res.json({
+    headers: req.headers,
+    authorization: req.headers.authorization,
+    cookies: req.cookies
+  });
 });
 
 // WebSocket for real-time updates
@@ -71,12 +93,12 @@ const startServer = async () => {
     ocppServer.start();
     
     // Start cleanup cron job for expired reservations (every 5 minutes)
-    setInterval(async () => {
-      const cleaned = await reserveController.cleanupExpiredReservations();
-      if (cleaned > 0) {
-        console.log(`🧹 Cleaned up ${cleaned} expired reservations`);
-      }
-    }, 5 * 60 * 1000); // 5 minutes
+    // setInterval(async () => {
+    //   const cleaned = await reserveController.cleanupExpiredReservations();
+    //   if (cleaned > 0) {
+    //     console.log(`🧹 Cleaned up ${cleaned} expired reservations`);
+    //   }
+    // }, 5 * 60 * 1000); // 5 minutes
     
     // Start HTTP server with Socket.IO
     server.listen(PORT, '0.0.0.0' , () => {

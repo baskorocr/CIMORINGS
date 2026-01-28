@@ -452,6 +452,16 @@ class OCPPServer {
         return {};
       },
 
+      DiagnosticsStatusNotification: async (chargePointId, payload) => {
+        console.log(`📊 ${chargePointId} diagnostics status: ${payload.status}`);
+        
+        // Use the new handler that includes pre-download logic
+        const { handleDiagnosticsStatusUpdate } = require('../controllers/diagnosticsController');
+        await handleDiagnosticsStatusUpdate(chargePointId, payload.status);
+        
+        return {};
+      },
+
       // Local Auth List Management Profile
       SendLocalList: async (chargePointId, payload) => {
         return { status: 'Accepted' };
@@ -469,6 +479,24 @@ class OCPPServer {
 
       RemoteStopTransaction: async (chargePointId, payload) => {
         return { status: 'Accepted' };
+      },
+
+      GetDiagnostics: async (chargePointId, payload) => {
+        // This is for GetDiagnostics CallResult (response from station)
+        console.log(`📁 GetDiagnostics CallResult from ${chargePointId}:`, payload);
+        if (payload.fileName) {
+          const connection = getConnection();
+          try {
+            const [result] = await connection.execute(
+              'UPDATE diagnostics_requests SET file_name = ? WHERE charge_point_id = ? AND status IN ("Requested", "Uploading") ORDER BY created_at DESC LIMIT 1',
+              [payload.fileName, chargePointId]
+            );
+            console.log(`📁 Updated filename ${payload.fileName} for ${chargePointId}, affected rows:`, result.affectedRows);
+          } catch (error) {
+            console.error('Failed to update filename:', error);
+          }
+        }
+        return { fileName: payload.fileName || null };
       },
 
       UnlockConnector: async (chargePointId, payload) => {
@@ -758,8 +786,23 @@ class OCPPServer {
   }
 
   // Handle CALLRESULT responses
-  handleCallResult(chargePointId, messageId, payload) {
+  async handleCallResult(chargePointId, messageId, payload) {
     console.log(`✅ Command response from ${chargePointId}:`, payload);
+    
+    // Handle GetDiagnostics response with fileName
+    if (payload.fileName) {
+      console.log(`📁 GetDiagnostics response with fileName: ${payload.fileName}`);
+      const connection = getConnection();
+      try {
+        const [result] = await connection.execute(
+          'UPDATE diagnostics_requests SET file_name = ? WHERE charge_point_id = ? AND status IN ("Requested", "Uploading") ORDER BY created_at DESC LIMIT 1',
+          [payload.fileName, chargePointId]
+        );
+        console.log(`📁 Updated filename ${payload.fileName} for ${chargePointId}, affected rows:`, result.affectedRows);
+      } catch (error) {
+        console.error('Failed to update filename:', error);
+      }
+    }
     
     // You can store pending requests and match them with responses
     // For now, just log the successful response
@@ -840,6 +883,25 @@ class OCPPServer {
         idTag,
         reservationId
       }]);
+      return true;
+    }
+    return false;
+  }
+
+  async sendGetDiagnostics(chargePointId, location, retries = 3, retryInterval = 60, startTime = null, stopTime = null) {
+    const ws = this.clients.get(chargePointId);
+    if (ws) {
+      const messageId = uuidv4();
+      const payload = {
+        location,
+        retries,
+        retryInterval
+      };
+      
+      if (startTime) payload.startTime = startTime;
+      if (stopTime) payload.stopTime = stopTime;
+      
+      this.sendMessage(ws, [2, messageId, 'GetDiagnostics', payload]);
       return true;
     }
     return false;

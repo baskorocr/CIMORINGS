@@ -103,6 +103,48 @@ const resetStation = async (req, res) => {
   }
 };
 
+const getDiagnostics = async (req, res) => {
+  try {
+    const { chargePointId, location, retries = 3, retryInterval = 60, startTime, stopTime } = req.body;
+    
+    // Store diagnostic request in database
+    const { getConnection } = require('../config/database');
+    const connection = getConnection();
+    
+    await connection.execute(`
+      INSERT INTO diagnostics_requests (charge_point_id, location, retries, retry_interval, start_time, stop_time, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'Requested', NOW(), NOW())
+    `, [chargePointId, location, retries, retryInterval, startTime, stopTime]);
+    
+    const success = await global.ocppServer?.sendGetDiagnostics(chargePointId, location, retries, retryInterval, startTime, stopTime);
+    
+    if (success) {
+      res.json({ 
+        success: true, 
+        message: `GetDiagnostics command sent to ${chargePointId}`,
+        location: location
+      });
+    } else {
+      // Update status to failed if station not connected
+      await connection.execute(
+        'UPDATE diagnostics_requests SET status = "Failed" WHERE charge_point_id = ? ORDER BY created_at DESC LIMIT 1',
+        [chargePointId]
+      );
+      
+      res.status(404).json({ 
+        success: false, 
+        message: `Charging station ${chargePointId} not connected` 
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error', 
+      error: error.message 
+    });
+  }
+};
+
 const getConnectedStations = async (req, res) => {
   try {
     const connectedStations = Array.from(global.ocppServer?.clients?.keys() || []);
@@ -121,5 +163,6 @@ module.exports = {
   remoteStopTransaction,
   unlockConnector,
   resetStation,
+  getDiagnostics,
   getConnectedStations
 };

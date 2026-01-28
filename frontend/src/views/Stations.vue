@@ -118,6 +118,7 @@
                   <el-dropdown-menu>
                     <el-dropdown-item command="view">View Details</el-dropdown-item>
                     <el-dropdown-item command="edit">Edit</el-dropdown-item>
+                    <el-dropdown-item command="diagnostics">Get Diagnostics</el-dropdown-item>
                     <el-dropdown-item command="delete" divided>Delete</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -404,6 +405,31 @@
               </el-card>
             </el-col>
           </el-row>
+          
+          <!-- OCPP Messages Section -->
+          <el-row style="margin-top: 20px;">
+            <el-col :span="24">
+              <el-card>
+                <template #header>
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>OCPP Messages</span>
+                    <el-button 
+                      size="small" 
+                      type="primary" 
+                      @click="downloadOCPPMessages(selectedStation)"
+                      :loading="downloadingMessages"
+                    >
+                      <el-icon><Download /></el-icon>
+                      Download CSV
+                    </el-button>
+                  </div>
+                </template>
+                <div style="text-align: center; padding: 20px; color: #909399;">
+                  Click "Download CSV" to get OCPP message logs for this station
+                </div>
+              </el-card>
+            </el-col>
+          </el-row>
         </div>
       </el-dialog>
 
@@ -449,6 +475,76 @@
           </div>
         </template>
       </el-dialog>
+
+      <!-- Diagnostics Dialog -->
+      <el-dialog
+        v-model="showDiagnosticsDialog"
+        :title="`Diagnostics - ${selectedStation?.name}`"
+        width="95%"
+        class="diagnostics-dialog"
+      >
+        <div class="diagnostics-controls">
+          <el-date-picker
+            v-model="diagnosticsDateRange"
+            type="daterange"
+            range-separator="To"
+            start-placeholder="Start"
+            end-placeholder="End"
+            size="small"
+            style="width: 240px;"
+          />
+          <el-button type="primary" size="small" @click="requestNewDiagnostics" :loading="requestingDiagnostics">
+            <el-icon><Document /></el-icon>
+            Request
+          </el-button>
+          <el-button size="small" @click="refreshDiagnostics">
+            <el-icon><Refresh /></el-icon>
+            Refresh
+          </el-button>
+        </div>
+
+        <el-table :data="filteredDiagnosticsData" v-loading="loadingDiagnostics" size="small">
+          <el-table-column prop="id" label="ID" width="60" />
+          <el-table-column prop="location" label="FTP Location" min-width="200" show-overflow-tooltip>
+            <template #default="scope">
+              {{ maskFtpCredentials(scope.row.location) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="retries" label="Retries" width="80" align="center" />
+          <el-table-column prop="status" label="Status" width="120">
+            <template #default="scope">
+              <el-tag :type="getStatusType(scope.row.status)" size="small">
+                {{ scope.row.status }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="created_at" label="Created" width="150">
+            <template #default="scope">
+              {{ new Date(scope.row.created_at).toLocaleDateString() }}
+            </template>
+          </el-table-column>
+          <el-table-column label="Actions" width="100" fixed="right">
+            <template #default="scope">
+              <el-button 
+                v-if="scope.row.status === 'Uploaded'" 
+                size="small" 
+                text 
+                @click="downloadDiagnosticFile(scope.row)"
+                title="Download ZIP file"
+              >
+                <el-icon><Download /></el-icon>
+              </el-button>
+              <span v-else style="color: #909399; font-size: 12px;">
+                {{ scope.row.status }}
+              </span>
+            </template>
+          </el-table-column>
+        </el-table>
+        
+        <div v-if="diagnosticsData.length === 0" style="text-align: center; padding: 40px; color: #909399;">
+          No diagnostic requests found
+        </div>
+      </el-dialog>
     </div>
   </Layout>
 </template>
@@ -490,6 +586,13 @@ export default {
           { min: 1, max: 20, message: 'ID Tag must be 1-20 characters', trigger: 'blur' }
         ]
       },
+      // Diagnostics
+      showDiagnosticsDialog: false,
+      diagnosticsData: [],
+      diagnosticsDateRange: null,
+      loadingDiagnostics: false,
+      requestingDiagnostics: false,
+      downloadingMessages: false,
       newStation: {
         charge_point_id: '',
         name: '',
@@ -551,6 +654,17 @@ export default {
     
     faultedStations() {
       return this.stations.filter(s => s.status === 'Faulted').length
+    },
+
+    filteredDiagnosticsData() {
+      if (!this.diagnosticsDateRange || this.diagnosticsDateRange.length !== 2) {
+        return this.diagnosticsData
+      }
+      const [startDate, endDate] = this.diagnosticsDateRange
+      return this.diagnosticsData.filter(item => {
+        const itemDate = new Date(item.created_at)
+        return itemDate >= startDate && itemDate <= endDate
+      })
     }
   },
   
@@ -648,6 +762,9 @@ export default {
           break
         case 'edit':
           this.editStation(station)
+          break
+        case 'diagnostics':
+          this.getDiagnostics(station)
           break
         case 'delete':
           this.deleteStation(station)
@@ -809,6 +926,146 @@ export default {
         connector_count: 1
       }
       this.$refs.stationForm?.resetFields()
+    },
+
+    // Diagnostics methods
+    async getDiagnostics(station) {
+      try {
+        this.selectedStation = station
+        this.loadingDiagnostics = true
+        const response = await fetch(`/api/stations/${station.id}/diagnostics`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        })
+        
+        if (!response.ok) {
+          throw new Error('Failed to get diagnostics')
+        }
+        
+        const data = await response.json()
+        this.diagnosticsData = data.data || []
+        this.showDiagnosticsDialog = true
+      } catch (error) {
+        this.$message.error('Failed to get diagnostics')
+      } finally {
+        this.loadingDiagnostics = false
+      }
+    },
+
+    async requestNewDiagnostics() {
+      try {
+        this.requestingDiagnostics = true
+        const payload = { retries: 3, retryInterval: 60 }
+        
+        if (this.diagnosticsDateRange && this.diagnosticsDateRange.length === 2) {
+          payload.startTime = this.diagnosticsDateRange[0].toISOString()
+          payload.stopTime = this.diagnosticsDateRange[1].toISOString()
+        }
+        
+        const response = await fetch(`/api/stations/${this.selectedStation.id}/diagnostics`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify(payload)
+        })
+        
+        const data = await response.json()
+        
+        if (response.ok) {
+          this.$message.success('Diagnostics request sent successfully')
+          await this.refreshDiagnostics()
+        } else {
+          this.$message.error(data.message || 'Failed to send diagnostics request')
+        }
+      } catch (error) {
+        this.$message.error('Failed to send diagnostics request')
+      } finally {
+        this.requestingDiagnostics = false
+      }
+    },
+
+    async refreshDiagnostics() {
+      if (this.selectedStation) {
+        await this.getDiagnostics(this.selectedStation)
+      }
+    },
+
+    getStatusType(status) {
+      const types = {
+        'Requested': 'info',
+        'Uploading': 'warning', 
+        'Uploaded': 'success',
+        'UploadFailed': 'danger',
+        'Failed': 'danger'
+      }
+      return types[status] || 'info'
+    },
+
+    maskFtpCredentials(ftpUrl) {
+      if (!ftpUrl) return ''
+      return ftpUrl.replace(/ftp:\/\/([^:]+):([^@]+)@/, 'ftp://***:***@')
+    },
+
+    async downloadDiagnosticFile(diagnosticRequest) {
+      try {
+        const response = await fetch(`/api/diagnostics/${diagnosticRequest.id}/download`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        })
+        
+        if (response.ok) {
+          const blob = await response.blob()
+          const url = window.URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.style.display = 'none'
+          a.href = url
+          a.download = diagnosticRequest.file_name || `diagnostic_${diagnosticRequest.message_id}.zip`
+          document.body.appendChild(a)
+          a.click()
+          window.URL.revokeObjectURL(url)
+          document.body.removeChild(a)
+          this.$message.success('Diagnostic file downloaded successfully')
+        } else {
+          this.$message.error('Failed to download diagnostic file')
+        }
+      } catch (error) {
+        this.$message.error('Failed to download diagnostic file')
+      }
+    },
+
+    async downloadOCPPMessages(station) {
+      try {
+        this.downloadingMessages = true
+        const response = await fetch(`/api/stations/${station.charge_point_id}/messages`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        })
+        
+        if (response.ok) {
+          const blob = await response.blob()
+          const url = window.URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.style.display = 'none'
+          a.href = url
+          a.download = `ocpp_messages_${station.charge_point_id}_${new Date().toISOString().split('T')[0]}.csv`
+          document.body.appendChild(a)
+          a.click()
+          window.URL.revokeObjectURL(url)
+          document.body.removeChild(a)
+          this.$message.success('OCPP messages downloaded successfully')
+        } else {
+          this.$message.error('Failed to download OCPP messages')
+        }
+      } catch (error) {
+        this.$message.error('Failed to download OCPP messages')
+      } finally {
+        this.downloadingMessages = false
+      }
     }
   }
 }

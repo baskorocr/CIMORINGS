@@ -13,6 +13,7 @@ const {
   remoteStopTransaction,
   unlockConnector,
   resetStation,
+  getDiagnostics,
   getConnectedStations
 } = require('../controllers/remoteController');
 
@@ -36,5 +37,6 @@ router.post('/remote/start', remoteStartTransaction);
 router.post('/remote/stop', remoteStopTransaction);
 router.post('/remote/unlock', unlockConnector);
 router.post('/remote/reset', resetStation);
+router.post('/remote/diagnostics', getDiagnostics);
 
 module.exports = router;
