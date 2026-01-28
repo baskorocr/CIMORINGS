@@ -95,6 +95,22 @@ const requestDiagnostics = async (req, res) => {
 const downloadDiagnosticFile = async (req, res) => {
   try {
     const { requestId } = req.params;
+    
+    // Handle token from query parameter, POST body, or Authorization header
+    let token = null;
+    if (req.query.token) {
+      token = req.query.token;
+    } else if (req.method === 'POST' && req.body && req.body.token) {
+      token = req.body.token;
+    } else if (req.headers.authorization) {
+      token = req.headers.authorization.replace('Bearer ', '');
+    }
+    
+    // Simple token validation - just check if exists (you can add proper JWT validation here)
+    if (!token) {
+      return res.status(401).json({ message: 'Access token required' });
+    }
+    
     const connection = getConnection();
     
     // Get request info
@@ -125,13 +141,28 @@ const downloadDiagnosticFile = async (req, res) => {
     
     const fileStats = fs.statSync(localPath);
     
+    // Set CORS headers for file download
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST');
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Length');
+    
     // Set response headers for file download
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Length', fileStats.size);
+    res.setHeader('Cache-Control', 'no-cache');
     
     // Stream file directly from local storage
     const fileStream = fs.createReadStream(localPath);
+    
+    fileStream.on('error', (streamError) => {
+      console.error('File stream error:', streamError);
+      if (!res.headersSent) {
+        res.status(500).json({ message: 'File streaming error', error: streamError.message });
+      }
+    });
+    
     fileStream.pipe(res);
     
     console.log(`✅ Diagnostic file served: ${fileName}`);
