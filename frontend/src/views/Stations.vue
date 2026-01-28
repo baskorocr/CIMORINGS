@@ -1011,28 +1011,22 @@ export default {
 
     async downloadDiagnosticFile(diagnosticRequest) {
       try {
-        const response = await fetch(`/api/diagnostics/${diagnosticRequest.id}/download`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        })
-        
-        if (response.ok) {
-          const blob = await response.blob()
-          const url = window.URL.createObjectURL(blob)
-          const a = document.createElement('a')
-          a.style.display = 'none'
-          a.href = url
-          a.download = diagnosticRequest.file_name || `diagnostic_${diagnosticRequest.message_id}.zip`
-          document.body.appendChild(a)
-          a.click()
-          window.URL.revokeObjectURL(url)
-          document.body.removeChild(a)
-          this.$message.success('Diagnostic file downloaded successfully')
-        } else {
-          this.$message.error('Failed to download diagnostic file')
+        const token = localStorage.getItem('token')
+        if (!token) {
+          this.$message.error('Please login first')
+          return
         }
+
+        // Use query parameter approach for token
+        const downloadUrl = `/api/diagnostics/${diagnosticRequest.id}/download?token=${encodeURIComponent(token)}`
+        
+        // Open in new window for download
+        window.open(downloadUrl, '_blank')
+        
+        this.$message.success('Download started')
+        
       } catch (error) {
+        console.error('Download error:', error)
         this.$message.error('Failed to download diagnostic file')
       }
     },
